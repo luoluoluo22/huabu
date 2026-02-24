@@ -187,3 +187,199 @@
 [11:52:43.063] Image transform end
 [11:52:44.239] Image resize start: handle=BottomRight, left=104.0, top=140.0, width=342.0
 [11:52:45.060] Image transform end
+[11:59:55.395] ShowMainWindow start
+[11:59:55.405] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:59:55.406] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:59:55.459] Restore skipped: no state file
+[11:59:57.027] Action tool click(border): Image, current=Select
+[11:59:58.820] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:59:58.822] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:59:58.822] Autosave scheduled: reason=image_added
+[12:00:01.763] State saved: reason=window_closing, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:01.811] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:03.285] ShowMainWindow start
+[12:00:03.286] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[12:00:03.286] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[12:00:03.316] State restored: images=1, strokes=0, zoom=1.00
+[12:00:05.195] Tool click(border): Hand, requested=None, current=Select, active=Select
+[12:00:05.196] ActivateModeTool: target=None, previous=Select, modeTools=4
+[12:00:05.198] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[12:00:05.536] Pan start: p=(257.0,547.0), pan=(0.0,0.0)
+[12:00:05.911] Pan end: pan=(198.0,-12.0)
+[12:00:05.911] Autosave scheduled: reason=pan_end
+[12:00:06.871] State saved: reason=window_closing, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:08.367] ShowMainWindow start
+[12:00:08.369] ActivateModeTool: target=Select, previous=None, modeTools=4
+[12:00:08.369] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=False
+[12:00:08.392] State restored: images=1, strokes=0, zoom=1.00
+[12:00:08.918] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:11.374] Image drag start: left=50.0, top=100.0
+[12:00:11.488] Image transform end
+[12:00:11.489] Autosave scheduled: reason=image_transform_end
+[12:00:11.946] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:14.941] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:17.937] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:20.948] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:23.942] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:26.672] Image drag start: left=50.0, top=100.0
+[12:00:26.770] Image transform end
+[12:00:26.770] Autosave scheduled: reason=image_transform_end
+[12:00:26.936] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:27.631] Image drag start: left=50.0, top=100.0
+[12:00:27.736] Image transform end
+[12:00:27.736] Autosave scheduled: reason=image_transform_end
+[12:00:29.690] Image drag start: left=50.0, top=100.0
+[12:00:29.772] Image transform end
+[12:00:29.772] Autosave scheduled: reason=image_transform_end
+[12:00:29.948] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:30.518] Image drag start: left=50.0, top=100.0
+[12:00:30.608] Image transform end
+[12:00:30.608] Autosave scheduled: reason=image_transform_end
+[12:00:32.948] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:35.936] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:38.938] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:41.945] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:44.949] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:47.937] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:50.938] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:53.947] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:56.945] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:00:59.946] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:01.561] Image drag start: left=50.0, top=100.0
+[12:01:01.643] Image transform end
+[12:01:01.643] Autosave scheduled: reason=image_transform_end
+[12:01:02.940] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:05.949] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:06.680] Autosave scheduled: reason=zoom
+[12:01:08.949] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:09.214] Image drag start: left=50.0, top=100.0
+[12:01:09.816] Image transform end
+[12:01:09.816] Autosave scheduled: reason=image_transform_end
+[12:01:10.259] Image drag start: left=111.1, top=112.2
+[12:01:10.568] Image transform end
+[12:01:10.568] Autosave scheduled: reason=image_transform_end
+[12:01:12.010] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:12.057] Image drag start: left=138.9, top=90.0
+[12:01:12.746] Image transform end
+[12:01:12.746] Autosave scheduled: reason=image_transform_end
+[12:01:14.275] Tool click(border): Annotate, requested=Ink, current=Select, active=Select
+[12:01:14.276] ActivateModeTool: target=Ink, previous=Select, modeTools=4
+[12:01:14.278] ApplyCanvasMode: Select -> Ink, inkCanvasMode=Ink, focused=True
+[12:01:15.009] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:17.838] Autosave scheduled: reason=undo
+[12:01:18.012] State saved: reason=debounced, images=1, strokes=1, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:18.363] Autosave scheduled: reason=undo
+[12:01:21.012] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:24.000] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:27.000] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:29.998] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:33.014] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:36.027] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:39.026] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:42.021] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:45.016] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:48.015] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:51.025] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:54.021] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:01:57.022] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:00.042] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:01.478] Autosave scheduled: reason=undo
+[12:02:02.777] Autosave scheduled: reason=undo
+[12:02:03.036] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:03.775] Autosave scheduled: reason=undo
+[12:02:04.864] Autosave scheduled: reason=undo
+[12:02:06.028] State saved: reason=debounced, images=1, strokes=1, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:06.854] Tool click(border): Eraser, requested=EraseByStroke, current=Ink, active=Ink
+[12:02:06.854] ActivateModeTool: target=EraseByStroke, previous=Ink, modeTools=4
+[12:02:06.855] ApplyCanvasMode: Ink -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[12:02:09.030] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:09.253] Tool click(border): Annotate, requested=Ink, current=EraseByStroke, active=EraseByStroke
+[12:02:09.253] ActivateModeTool: target=Ink, previous=EraseByStroke, modeTools=4
+[12:02:09.254] ApplyCanvasMode: EraseByStroke -> Ink, inkCanvasMode=Ink, focused=True
+[12:02:10.818] Tool click(border): Eraser, requested=EraseByStroke, current=Ink, active=Ink
+[12:02:10.818] ActivateModeTool: target=EraseByStroke, previous=Ink, modeTools=4
+[12:02:10.818] ApplyCanvasMode: Ink -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[12:02:12.037] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:12.251] Tool click(border): Annotate, requested=Ink, current=EraseByStroke, active=EraseByStroke
+[12:02:12.252] ActivateModeTool: target=Ink, previous=EraseByStroke, modeTools=4
+[12:02:12.252] ApplyCanvasMode: EraseByStroke -> Ink, inkCanvasMode=Ink, focused=True
+[12:02:13.722] Tool click(border): Eraser, requested=EraseByStroke, current=Ink, active=Ink
+[12:02:13.722] ActivateModeTool: target=EraseByStroke, previous=Ink, modeTools=4
+[12:02:13.723] ApplyCanvasMode: Ink -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[12:02:15.038] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:18.035] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:19.055] Tool click(border): Hand, requested=None, current=EraseByStroke, active=EraseByStroke
+[12:02:19.055] ActivateModeTool: target=None, previous=EraseByStroke, modeTools=4
+[12:02:19.056] ApplyCanvasMode: EraseByStroke -> None, inkCanvasMode=None, focused=True
+[12:02:19.426] Pan start: p=(454.0,545.0), pan=(198.0,-12.0)
+[12:02:19.988] Pan end: pan=(199.0,5.0)
+[12:02:19.988] Autosave scheduled: reason=pan_end
+[12:02:21.035] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:24.033] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:27.047] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:30.047] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:33.123] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:36.139] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:39.143] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:42.152] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:45.153] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:48.139] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:51.152] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:54.152] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:02:57.144] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:00.143] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:03.143] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:06.150] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:09.139] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:12.196] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:15.196] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:18.192] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:21.190] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:24.186] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:27.198] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:30.185] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:33.189] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:36.191] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:36.828] State saved: reason=window_closing, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:38.582] ShowMainWindow start
+[12:03:38.592] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[12:03:38.593] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[12:03:38.626] State restored: images=1, strokes=0, zoom=0.90
+[12:03:39.213] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:41.660] Space up: temporary pan disabled
+[12:03:42.213] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:43.117] Space up: temporary pan disabled
+[12:03:45.200] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:48.210] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:51.208] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:54.203] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:03:57.202] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:00.223] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:03.224] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:03.354] State saved: reason=window_closing, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:06.226] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:09.224] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:11.990] ShowMainWindow start
+[12:04:11.992] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[12:04:11.992] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[12:04:12.014] State restored: images=1, strokes=0, zoom=0.90
+[12:04:12.224] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:15.231] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:18.250] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:20.415] Space up: temporary pan disabled
+[12:04:21.249] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:24.258] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:27.267] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:30.269] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:33.132] Space up: temporary pan disabled
+[12:04:33.284] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:35.990] Space up: temporary pan disabled
+[12:04:36.287] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:39.282] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:42.293] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:45.289] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:48.290] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:51.286] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:54.280] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:04:57.283] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json
+[12:05:00.279] State saved: reason=debounced, images=1, strokes=0, file=C:\Users\Administrator\AppData\Local\JaazStudio\canvas_state.json

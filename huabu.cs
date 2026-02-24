@@ -14,6 +14,7 @@ using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Quicker.Public;
 
@@ -39,6 +40,24 @@ public class ChatMessage : INotifyPropertyChanged
 
 public static class JaazCoreCanvas
 {
+    private class PersistedCanvasState
+    {
+        public double Zoom { get; set; } = 1.0;
+        public double PanX { get; set; }
+        public double PanY { get; set; }
+        public string StrokeDataBase64 { get; set; }
+        public List<PersistedImageItem> Images { get; set; } = new List<PersistedImageItem>();
+    }
+
+    private class PersistedImageItem
+    {
+        public string SourcePath { get; set; }
+        public double Left { get; set; }
+        public double Top { get; set; }
+        public double Width { get; set; }
+        public double? Height { get; set; }
+    }
+
     private class ToolbarIconInfo
     {
         public Border Border { get; set; }
@@ -62,6 +81,7 @@ public static class JaazCoreCanvas
     private static readonly HttpClient _httpClient = new HttpClient();
     private static bool _isMarqueeSelecting = false;
     private static bool _isCanvasPanning = false;
+    private static bool _isSpacePressed = false;
     private static bool _isImageDragging = false;
     private static bool _isImageResizing = false;
     private static Point _marqueeStart;
@@ -76,6 +96,9 @@ public static class JaazCoreCanvas
     private static InkCanvasEditingMode _currentMode = InkCanvasEditingMode.Select;
     private static readonly List<ToolbarIconInfo> _modeTools = new List<ToolbarIconInfo>();
     private static ToolbarIconInfo _activeModeTool;
+    private static readonly Dictionary<Image, string> _imageSourceLookup = new Dictionary<Image, string>();
+    private static DispatcherTimer _autosaveTimer;
+    private static bool _isRestoringState;
     private static ResizeHandle _activeResizeHandle = ResizeHandle.None;
     private const double ResizeHandleHitRadius = 14;
     private const double MinImageWidth = 60;
@@ -100,6 +123,8 @@ public static class JaazCoreCanvas
 
     private static readonly string LogDir = @"F:\Desktop\kaifa\huabu";
     private static readonly string LogFile = Path.Combine(LogDir, "client_debug.log");
+    private static readonly string StateDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JaazStudio");
+    private static readonly string StateFile = Path.Combine(StateDir, "canvas_state.json");
 
     public static void Exec(IStepContext context)
     {
@@ -122,11 +147,163 @@ public static class JaazCoreCanvas
         } catch {}
     }
 
+    private static void InitAutosaveTimer()
+    {
+        _autosaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _autosaveTimer.Tick += (s, e) => {
+            _autosaveTimer.Stop();
+            SaveCanvasStateNow("debounced");
+        };
+    }
+
+    private static void ScheduleAutosave(string reason)
+    {
+        if (_isRestoringState) return;
+        if (_autosaveTimer == null) return;
+        _autosaveTimer.Stop();
+        _autosaveTimer.Start();
+        Log($"Autosave scheduled: reason={reason}");
+    }
+
+    private static void SaveCanvasStateNow(string reason)
+    {
+        try
+        {
+            if (_mainCanvas == null) return;
+
+            Directory.CreateDirectory(StateDir);
+            var state = new PersistedCanvasState
+            {
+                Zoom = _zoomLevel,
+                PanX = _canvasPan.X,
+                PanY = _canvasPan.Y
+            };
+
+            using (var ms = new MemoryStream())
+            {
+                _mainCanvas.Strokes.Save(ms);
+                state.StrokeDataBase64 = Convert.ToBase64String(ms.ToArray());
+            }
+
+            foreach (var image in _mainCanvas.Children.OfType<Image>())
+            {
+                if (!_imageSourceLookup.TryGetValue(image, out var src) || string.IsNullOrWhiteSpace(src))
+                {
+                    src = (image.Source as BitmapImage)?.UriSource?.ToString();
+                }
+                if (string.IsNullOrWhiteSpace(src)) continue;
+
+                double left = InkCanvas.GetLeft(image);
+                double top = InkCanvas.GetTop(image);
+                if (double.IsNaN(left)) left = 0;
+                if (double.IsNaN(top)) top = 0;
+
+                state.Images.Add(new PersistedImageItem
+                {
+                    SourcePath = src,
+                    Left = left,
+                    Top = top,
+                    Width = image.Width > 0 ? image.Width : image.ActualWidth,
+                    Height = (!double.IsNaN(image.Height) && image.Height > 0) ? image.Height : (double?)null
+                });
+            }
+
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(state, Newtonsoft.Json.Formatting.Indented);
+            File.WriteAllText(StateFile, json, Encoding.UTF8);
+            Log($"State saved: reason={reason}, images={state.Images.Count}, strokes={_mainCanvas.Strokes.Count}, file={StateFile}");
+        }
+        catch (Exception ex)
+        {
+            Log("State save error: " + ex.Message);
+        }
+    }
+
+    private static void RestoreCanvasState()
+    {
+        try
+        {
+            if (!File.Exists(StateFile))
+            {
+                Log("Restore skipped: no state file");
+                return;
+            }
+
+            var json = File.ReadAllText(StateFile, Encoding.UTF8);
+            var state = Newtonsoft.Json.JsonConvert.DeserializeObject<PersistedCanvasState>(json);
+            if (state == null)
+            {
+                Log("Restore skipped: invalid state");
+                return;
+            }
+
+            _isRestoringState = true;
+
+            _mainCanvas.Strokes.Clear();
+            _mainCanvas.Children.Clear();
+            _imageSourceLookup.Clear();
+
+            _zoomLevel = Math.Max(0.1, Math.Min(5, state.Zoom));
+            _canvasScale.ScaleX = _canvasScale.ScaleY = _zoomLevel;
+            _overlayScale.ScaleX = _overlayScale.ScaleY = _zoomLevel;
+            _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
+
+            _canvasPan.X = state.PanX;
+            _canvasPan.Y = state.PanY;
+            _overlayPan.X = state.PanX;
+            _overlayPan.Y = state.PanY;
+
+            if (!string.IsNullOrWhiteSpace(state.StrokeDataBase64))
+            {
+                byte[] strokeBytes = Convert.FromBase64String(state.StrokeDataBase64);
+                using (var ms = new MemoryStream(strokeBytes))
+                {
+                    _mainCanvas.Strokes = new System.Windows.Ink.StrokeCollection(ms);
+                }
+            }
+
+            foreach (var item in state.Images ?? new List<PersistedImageItem>())
+            {
+                if (string.IsNullOrWhiteSpace(item.SourcePath)) continue;
+                try
+                {
+                    var bmp = new BitmapImage(new Uri(item.SourcePath, UriKind.RelativeOrAbsolute));
+                    var image = new Image
+                    {
+                        Source = bmp,
+                        Width = item.Width > 0 ? item.Width : 400,
+                        Stretch = Stretch.Uniform
+                    };
+                    if (item.Height.HasValue && item.Height.Value > 0) image.Height = item.Height.Value;
+                    InkCanvas.SetLeft(image, item.Left);
+                    InkCanvas.SetTop(image, item.Top);
+                    _mainCanvas.Children.Add(image);
+                    _imageSourceLookup[image] = item.SourcePath;
+                }
+                catch (Exception ex)
+                {
+                    Log($"Restore image skipped: src={item.SourcePath}, err={ex.Message}");
+                }
+            }
+
+            UpdateLastImagePosition();
+            Log($"State restored: images={_mainCanvas.Children.OfType<Image>().Count()}, strokes={_mainCanvas.Strokes.Count}, zoom={_zoomLevel:F2}");
+        }
+        catch (Exception ex)
+        {
+            Log("State restore error: " + ex.Message);
+        }
+        finally
+        {
+            _isRestoringState = false;
+        }
+    }
+
     public static void ShowMainWindow()
     {
         // Static collection persists across window instances; reset per launch to avoid duplicated welcome messages.
         _chatHistory.Clear();
         Log("ShowMainWindow start");
+        InitAutosaveTimer();
 
         var window = new Window
         {
@@ -177,6 +354,7 @@ public static class JaazCoreCanvas
         _mainCanvas.RenderTransform = canvasTransforms;
         _mainCanvas.DefaultDrawingAttributes.Color = Colors.Cyan;
         _mainCanvas.SelectionChanged += OnCanvasSelectionChanged;
+        _mainCanvas.Strokes.StrokesChanged += (s, e) => ScheduleAutosave("strokes_changed");
 
         // Keep overlay interactive for its children (popbar), but let empty space pass mouse
         // events through to InkCanvas so drag-selection works.
@@ -194,18 +372,39 @@ public static class JaazCoreCanvas
                 _overlayScale.ScaleX = _overlayScale.ScaleY = _zoomLevel;
                 _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
                 HidePopbar();
+                ScheduleAutosave("zoom");
                 e.Handled = true;
             }
         };
 
         window.KeyDown += (s, e) => {
+            if (e.Key == Key.Space) {
+                if (!IsTextInputFocused()) {
+                    _isSpacePressed = true;
+                    _mainCanvas.Cursor = Cursors.Hand;
+                    if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Hand;
+                    Log("Space down: temporary pan enabled");
+                    e.Handled = true;
+                    return;
+                }
+            }
             if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) {
                 if (_mainCanvas.Strokes.Count > 0) _mainCanvas.Strokes.RemoveAt(_mainCanvas.Strokes.Count - 1);
                 else if (_mainCanvas.Children.Count > 0) {
                     _mainCanvas.Children.RemoveAt(_mainCanvas.Children.Count - 1);
                     UpdateLastImagePosition();
                 }
+                ScheduleAutosave("undo");
             }
+        };
+        window.KeyUp += (s, e) => {
+            if (e.Key != Key.Space) return;
+            _isSpacePressed = false;
+            if (_isCanvasPanning) return;
+            var cursor = _currentMode == InkCanvasEditingMode.None ? Cursors.Hand : Cursors.Arrow;
+            _mainCanvas.Cursor = cursor;
+            if (_canvasOverlay != null) _canvasOverlay.Cursor = cursor;
+            Log("Space up: temporary pan disabled");
         };
 
         _selectionPopbar = CreateSelectionPopbar();
@@ -242,7 +441,14 @@ public static class JaazCoreCanvas
         var penTool = CreateModeToolbarIcon(pathPen, "Annotate", InkCanvasEditingMode.Ink);
         var imageTool = CreateActionToolbarIcon(pathImage, "Image", () => UploadImage());
         var eraserTool = CreateModeToolbarIcon(pathEraser, "Eraser", InkCanvasEditingMode.EraseByStroke);
-        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); });
+        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => {
+            _mainCanvas.Strokes.Clear();
+            _mainCanvas.Children.Clear();
+            _imageSourceLookup.Clear();
+            _lastImageRight = 50;
+            HidePopbar();
+            ScheduleAutosave("clear");
+        });
 
         toolStack.Children.Add(panTool.Border);
         toolStack.Children.Add(selectTool.Border);
@@ -275,6 +481,8 @@ public static class JaazCoreCanvas
         rootGrid.Children.Add(topBarBorder); rootGrid.Children.Add(mainGrid);
 
         window.Content = rootGrid;
+        window.Loaded += (s, e) => RestoreCanvasState();
+        window.Closing += (s, e) => SaveCanvasStateNow("window_closing");
         window.Show();
         AddMessage("Assistant", "System ready. Select elements and generate. Ctrl + mouse wheel to zoom.");
     }
@@ -363,7 +571,7 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (_currentMode == InkCanvasEditingMode.None) {
+        if (_currentMode == InkCanvasEditingMode.None || _isSpacePressed) {
             _isCanvasPanning = true;
             IInputElement panSurface = (IInputElement)_canvasHost ?? _mainCanvas;
             _lastPanPoint = e.GetPosition(panSurface);
@@ -462,7 +670,7 @@ public static class JaazCoreCanvas
         }
 
         // Cursor feedback for image interactions in Select mode.
-        if (_currentMode == InkCanvasEditingMode.Select && !_isImageDragging && !_isImageResizing) {
+        if (!_isSpacePressed && _currentMode == InkCanvasEditingMode.Select && !_isImageDragging && !_isImageResizing) {
             Point hoverOverlayPoint = e.GetPosition(_canvasOverlay);
             Point hoverCanvasPoint = _canvasOverlay.TranslatePoint(hoverOverlayPoint, _mainCanvas);
             var hoverImage = FindTopImageAtPoint(hoverCanvasPoint);
@@ -522,6 +730,7 @@ public static class JaazCoreCanvas
             _mainCanvas.Cursor = Cursors.Arrow;
             if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Arrow;
             Log("Image transform end");
+            ScheduleAutosave("image_transform_end");
             e.Handled = true;
             return;
         }
@@ -530,10 +739,11 @@ public static class JaazCoreCanvas
             _isCanvasPanning = false;
             _mainCanvas.ReleaseMouseCapture();
             _canvasOverlay?.ReleaseMouseCapture();
-            var targetCursor = _currentMode == InkCanvasEditingMode.None ? Cursors.Hand : Cursors.Arrow;
+            var targetCursor = (_isSpacePressed || _currentMode == InkCanvasEditingMode.None) ? Cursors.Hand : Cursors.Arrow;
             _mainCanvas.Cursor = targetCursor;
             if (_canvasOverlay != null) _canvasOverlay.Cursor = targetCursor;
             Log($"Pan end: pan=({_canvasPan.X:F1},{_canvasPan.Y:F1})");
+            ScheduleAutosave("pan_end");
             e.Handled = true;
             return;
         }
@@ -854,10 +1064,13 @@ public static class JaazCoreCanvas
             var b = new BitmapImage(new Uri(path, UriKind.RelativeOrAbsolute));
             var img = new Image { Source = b, Width = 400, Stretch = Stretch.Uniform };
             InkCanvas.SetLeft(img, _lastImageRight); InkCanvas.SetTop(img, 100);
-            _mainCanvas.Children.Add(img); _lastImageRight += 420;
+            _mainCanvas.Children.Add(img);
+            _imageSourceLookup[img] = path;
+            _lastImageRight += 420;
             var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
             if (selectTool != null) ActivateModeTool(selectTool);
             else ApplyCanvasMode(InkCanvasEditingMode.Select);
+            ScheduleAutosave("image_added");
         } catch {}
     }
 
@@ -963,11 +1176,20 @@ public static class JaazCoreCanvas
         _currentMode = mode;
         _mainCanvas.EditingMode = mode;
         _mainCanvas.EditingModeInverted = InkCanvasEditingMode.None;
-        var targetCursor = mode == InkCanvasEditingMode.None ? Cursors.Hand : Cursors.Arrow;
+        var targetCursor = (_isSpacePressed || mode == InkCanvasEditingMode.None) ? Cursors.Hand : Cursors.Arrow;
         _mainCanvas.Cursor = targetCursor;
         if (_canvasOverlay != null) _canvasOverlay.Cursor = targetCursor;
         _mainCanvas.Focus();
         Log($"ApplyCanvasMode: {prev} -> {mode}, inkCanvasMode={_mainCanvas.EditingMode}, focused={_mainCanvas.IsKeyboardFocusWithin}");
+    }
+
+    private static bool IsTextInputFocused() {
+        var focused = Keyboard.FocusedElement as DependencyObject;
+        while (focused != null) {
+            if (focused is TextBox || focused is PasswordBox || focused is RichTextBox) return true;
+            focused = VisualTreeHelper.GetParent(focused);
+        }
+        return false;
     }
 
     private static DataTemplate CreateMessageTemplate() {
