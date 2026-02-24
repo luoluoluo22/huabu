@@ -54,27 +54,18 @@ public static class JaazCoreCanvas
     private static Border _selectionPopbar;
     private static TextBox _popbarInput;
     private static Canvas _canvasOverlay;
+    private const double VirtualCanvasWidth = 8000;
+    private const double VirtualCanvasHeight = 8000;
     private static ScaleTransform _canvasScale = new ScaleTransform(1, 1);
-    private static TranslateTransform _canvasPan = new TranslateTransform(0, 0);
-    private static TransformGroup _worldTransform = new TransformGroup();
     private static readonly HttpClient _httpClient = new HttpClient();
     private static bool _isMarqueeSelecting = false;
     private static Point _marqueeStart;
     private static Border _marqueeRect;
-    private static bool _isPanningCanvas = false;
-    private static Point _panStartOverlay;
-    private static double _panStartX;
-    private static double _panStartY;
     private static bool _isDraggingImage = false;
     private static Image _draggingImage;
     private static Point _dragStartCanvas;
     private static double _dragImageStartLeft;
     private static double _dragImageStartTop;
-    private static double _worldWidth = 12000;
-    private static double _worldHeight = 12000;
-    private const double WorldPadding = 200;
-    private const double WorldExpandStep = 4000;
-    private const double WorldRecoverPadding = 40;
     private static InkCanvasEditingMode _currentMode = InkCanvasEditingMode.Select;
     private static readonly List<ToolbarIconInfo> _modeTools = new List<ToolbarIconInfo>();
     private static ToolbarIconInfo _activeModeTool;
@@ -86,22 +77,10 @@ public static class JaazCoreCanvas
         "When user provides an annotated reference image, you must generate a NEW edited result image based on the instruction and visual cues. " +
         "Do not keep the input unchanged. Do not only describe. Output a generated image result.";
     private static double _zoomLevel = 1.0;
-    private static double _lastImageRight = WorldPadding;
+    private static double _lastImageRight = 50;
 
     private static readonly string LogDir = @"F:\Desktop\kaifa\huabu";
     private static readonly string LogFile = Path.Combine(LogDir, "client_debug.log");
-
-    private static string F(double v) => v.ToString("0.##");
-    private static string P(Point p) => $"({F(p.X)}, {F(p.Y)})";
-    private static string R(Rect r) => $"[{F(r.Left)}, {F(r.Top)}, {F(r.Width)}, {F(r.Height)}]";
-
-    private static void LogCanvasState(string tag) {
-        try {
-            string canvasSize = _mainCanvas == null ? "null" : $"{F(_mainCanvas.Width)}x{F(_mainCanvas.Height)}";
-            string overlaySize = _canvasOverlay == null ? "null" : $"{F(_canvasOverlay.Width)}x{F(_canvasOverlay.Height)}";
-            Log($"{tag} | zoom={F(_zoomLevel)} pan={P(new Point(_canvasPan.X, _canvasPan.Y))} world={F(_worldWidth)}x{F(_worldHeight)} mainCanvas={canvasSize} overlay={overlaySize} lastImageRight={F(_lastImageRight)}");
-        } catch {}
-    }
 
     public static void Exec(IStepContext context)
     {
@@ -128,14 +107,6 @@ public static class JaazCoreCanvas
     {
         // Static collection persists across window instances; reset per launch to avoid duplicated welcome messages.
         _chatHistory.Clear();
-        _zoomLevel = 1.0;
-        _canvasScale.ScaleX = 1.0;
-        _canvasScale.ScaleY = 1.0;
-        _canvasPan.X = 0;
-        _canvasPan.Y = 0;
-        _worldWidth = 12000;
-        _worldHeight = 12000;
-        _lastImageRight = WorldPadding;
         Log("ShowMainWindow start");
 
         var window = new Window
@@ -171,26 +142,19 @@ public static class JaazCoreCanvas
         mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
 
         // Canvas container
-        var canvasContainer = new Grid
-        {
-            Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)),
-            ClipToBounds = true
-        };
-        _worldTransform = new TransformGroup();
-        _worldTransform.Children.Add(_canvasScale);
-        _worldTransform.Children.Add(_canvasPan);
-
+        var canvasContainer = new Grid();
         _mainCanvas = new InkCanvas { 
-            Background = Brushes.Transparent,
+            Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)), 
             AllowDrop = true,
             EditingMode = InkCanvasEditingMode.Select,
-            RenderTransform = _worldTransform,
+            LayoutTransform = _canvasScale,
+            Width = VirtualCanvasWidth,
+            Height = VirtualCanvasHeight,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top
         };
         _mainCanvas.DefaultDrawingAttributes.Color = Colors.Cyan;
         _mainCanvas.SelectionChanged += OnCanvasSelectionChanged;
-        _mainCanvas.StrokeCollected += (s, e) => EnsureWorldBoundsForRect(e.Stroke.GetBounds());
 
         // Keep overlay interactive for its children (popbar), but let empty space pass mouse
         // events through to InkCanvas so drag-selection works.
@@ -198,10 +162,11 @@ public static class JaazCoreCanvas
         {
             IsHitTestVisible = true,
             Background = null,
+            Width = VirtualCanvasWidth,
+            Height = VirtualCanvasHeight,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top
         };
-        ApplyWorldSize();
         
         canvasContainer.PreviewMouseWheel += (s, e) => {
             if (Keyboard.Modifiers == ModifierKeys.Shift && TransformSelectedImages(scaleDelta: e.Delta > 0 ? 0.05 : -0.05, rotateDelta: 0)) {
@@ -214,7 +179,9 @@ public static class JaazCoreCanvas
             }
             if (Keyboard.Modifiers == ModifierKeys.Control) {
                 double delta = e.Delta > 0 ? 0.1 : -0.1;
-                ZoomCanvasAt(e.GetPosition(_canvasOverlay), delta);
+                _zoomLevel = Math.Max(0.1, Math.Min(5, _zoomLevel + delta));
+                _canvasScale.ScaleX = _canvasScale.ScaleY = _zoomLevel;
+                _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
                 HidePopbar();
                 e.Handled = true;
             }
@@ -261,7 +228,7 @@ public static class JaazCoreCanvas
         var penTool = CreateModeToolbarIcon(pathPen, "Annotate", InkCanvasEditingMode.Ink);
         var imageTool = CreateActionToolbarIcon(pathImage, "Image", () => UploadImage());
         var eraserTool = CreateModeToolbarIcon(pathEraser, "Eraser", InkCanvasEditingMode.EraseByStroke);
-        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = WorldPadding; HidePopbar(); });
+        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); });
 
         toolStack.Children.Add(panTool.Border);
         toolStack.Children.Add(selectTool.Border);
@@ -295,7 +262,7 @@ public static class JaazCoreCanvas
 
         window.Content = rootGrid;
         window.Show();
-        AddMessage("Assistant", "System ready. Select elements and generate. Ctrl+wheel to zoom, Hand tool drag to pan.");
+        AddMessage("Assistant", "System ready. Select elements and generate. Ctrl + mouse wheel to zoom.");
     }
 
     private static Border CreateSelectionPopbar() {
@@ -365,21 +332,10 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        Point overlayPoint = e.GetPosition(_canvasOverlay);
-        Point canvasPoint = OverlayToCanvasPoint(overlayPoint);
-        Log($"MouseDown | overlay={P(overlayPoint)} canvas={P(canvasPoint)} mode={_currentMode}");
-
-        if (_currentMode == InkCanvasEditingMode.None) {
-            _isPanningCanvas = true;
-            _panStartOverlay = overlayPoint;
-            _panStartX = _canvasPan.X;
-            _panStartY = _canvasPan.Y;
-            _mainCanvas.CaptureMouse();
-            e.Handled = true;
-            return;
-        }
-
         if (_currentMode != InkCanvasEditingMode.Select) return;
+
+        Point overlayPoint = e.GetPosition(_canvasOverlay);
+        Point canvasPoint = _canvasOverlay.TranslatePoint(overlayPoint, _mainCanvas);
 
         if (TryGetImageAtPoint(canvasPoint, out var hitImage)) {
             var selectedElements = _mainCanvas.GetSelectedElements();
@@ -395,7 +351,6 @@ public static class JaazCoreCanvas
             _dragImageStartLeft = double.IsNaN(left) ? 0 : left;
             _dragImageStartTop = double.IsNaN(top) ? 0 : top;
             _mainCanvas.CaptureMouse();
-            Log($"DragImage start | imageLeftTop={P(new Point(_dragImageStartLeft, _dragImageStartTop))} pointerCanvas={P(_dragStartCanvas)} imageSize={F(hitImage.Width)}x{F(hitImage.Height)}");
             e.Handled = true;
             return;
         }
@@ -437,23 +392,13 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseMove(object sender, MouseEventArgs e) {
-        if (_isPanningCanvas) {
-            Point overlayPoint = e.GetPosition(_canvasOverlay);
-            _canvasPan.X = _panStartX + (overlayPoint.X - _panStartOverlay.X);
-            _canvasPan.Y = _panStartY + (overlayPoint.Y - _panStartOverlay.Y);
-            UpdateSelectionPopbarPosition();
-            e.Handled = true;
-            return;
-        }
-
         if (_isDraggingImage && _draggingImage != null) {
             Point overlayPoint = e.GetPosition(_canvasOverlay);
-            Point canvasPoint = OverlayToCanvasPoint(overlayPoint);
+            Point canvasPoint = _canvasOverlay.TranslatePoint(overlayPoint, _mainCanvas);
             double dx = canvasPoint.X - _dragStartCanvas.X;
             double dy = canvasPoint.Y - _dragStartCanvas.Y;
             InkCanvas.SetLeft(_draggingImage, _dragImageStartLeft + dx);
             InkCanvas.SetTop(_draggingImage, _dragImageStartTop + dy);
-            EnsureWorldBoundsForRect(GetElementWorldBounds(_draggingImage));
             UpdateSelectionPopbarPosition();
             e.Handled = true;
             return;
@@ -474,20 +419,7 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_isPanningCanvas) {
-            _isPanningCanvas = false;
-            _mainCanvas.ReleaseMouseCapture();
-            e.Handled = true;
-            return;
-        }
-
         if (_isDraggingImage) {
-            if (_draggingImage != null) {
-                double imgLeft = InkCanvas.GetLeft(_draggingImage);
-                double imgTop = InkCanvas.GetTop(_draggingImage);
-                Point screenPos = CanvasToOverlayPoint(new Point(double.IsNaN(imgLeft) ? 0 : imgLeft, double.IsNaN(imgTop) ? 0 : imgTop));
-                Log($"DragImage end | imageLeftTop={P(new Point(imgLeft, imgTop))} screenPos={P(screenPos)}");
-            }
             _isDraggingImage = false;
             _draggingImage = null;
             _mainCanvas.ReleaseMouseCapture();
@@ -511,8 +443,8 @@ public static class JaazCoreCanvas
 
         // Overlay rect is in screen/overlay coordinates; convert to canvas logical coordinates
         // so selection works correctly at any zoom level.
-        Point canvasTopLeft = OverlayToCanvasPoint(new Point(left, top));
-        Point canvasBottomRight = OverlayToCanvasPoint(new Point(left + width, top + height));
+        Point canvasTopLeft = _canvasOverlay.TranslatePoint(new Point(left, top), _mainCanvas);
+        Point canvasBottomRight = _canvasOverlay.TranslatePoint(new Point(left + width, top + height), _mainCanvas);
         Rect selectionRect = new Rect(canvasTopLeft, canvasBottomRight);
         var hitStrokes = _mainCanvas.Strokes.HitTest(selectionRect, 2);
         var hitElements = _mainCanvas.Children
@@ -535,126 +467,6 @@ public static class JaazCoreCanvas
 
         _mainCanvas.Select(hitStrokes, hitElements);
         e.Handled = true;
-    }
-
-    private static void ZoomCanvasAt(Point overlayPoint, double zoomDelta) {
-        double oldZoom = _zoomLevel;
-        double nextZoom = Math.Max(0.1, Math.Min(5, oldZoom + zoomDelta));
-        if (Math.Abs(nextZoom - oldZoom) < 0.0001) return;
-
-        Point worldPoint = OverlayToCanvasPoint(overlayPoint);
-        _zoomLevel = nextZoom;
-        _canvasScale.ScaleX = _canvasScale.ScaleY = _zoomLevel;
-
-        Point screenAfter = CanvasToOverlayPoint(worldPoint);
-        _canvasPan.X += overlayPoint.X - screenAfter.X;
-        _canvasPan.Y += overlayPoint.Y - screenAfter.Y;
-        _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
-        Log($"ZoomCanvasAt | overlay={P(overlayPoint)} world={P(worldPoint)} zoom={F(oldZoom)}->{F(nextZoom)} pan={P(new Point(_canvasPan.X, _canvasPan.Y))}");
-    }
-
-    private static Point OverlayToCanvasPoint(Point overlayPoint) {
-        Matrix m = _worldTransform.Value;
-        if (m.HasInverse) {
-            m.Invert();
-            return m.Transform(overlayPoint);
-        }
-        return overlayPoint;
-    }
-
-    private static Point CanvasToOverlayPoint(Point canvasPoint) {
-        return _worldTransform.Value.Transform(canvasPoint);
-    }
-
-    private static void ApplyWorldSize() {
-        if (_mainCanvas != null) {
-            _mainCanvas.Width = _worldWidth;
-            _mainCanvas.Height = _worldHeight;
-        }
-        if (_canvasOverlay != null) {
-            _canvasOverlay.Width = _worldWidth;
-            _canvasOverlay.Height = _worldHeight;
-        }
-        LogCanvasState("ApplyWorldSize");
-    }
-
-    private static Rect GetElementWorldBounds(FrameworkElement fe) {
-        double x = InkCanvas.GetLeft(fe);
-        double y = InkCanvas.GetTop(fe);
-        if (double.IsNaN(x)) x = 0;
-        if (double.IsNaN(y)) y = 0;
-        double w = fe.ActualWidth > 0 ? fe.ActualWidth : fe.Width;
-        double h = fe.ActualHeight > 0 ? fe.ActualHeight : fe.Height;
-        if (w <= 0) w = 1;
-        if (h <= 0) h = 1;
-        return new Rect(x, y, w, h);
-    }
-
-    private static void EnsureWorldBoundsForRect(Rect rect) {
-        if (rect.IsEmpty || rect.Width <= 0 || rect.Height <= 0) return;
-        Rect original = rect;
-
-        double shiftX = 0;
-        double shiftY = 0;
-        if (rect.Left < 0) {
-            shiftX = -rect.Left + WorldRecoverPadding;
-        }
-        if (rect.Top < 0) {
-            shiftY = -rect.Top + WorldRecoverPadding;
-        }
-        if (shiftX != 0 || shiftY != 0) {
-            ShiftAllWorldContent(shiftX, shiftY);
-            rect.Offset(shiftX, shiftY);
-            Log($"EnsureWorldBoundsForRect shift | original={R(original)} shiftedBy=({F(shiftX)}, {F(shiftY)}) afterShift={R(rect)}");
-        }
-
-        bool grew = false;
-        while (rect.Right > _worldWidth - WorldPadding) {
-            _worldWidth += WorldExpandStep;
-            grew = true;
-        }
-        while (rect.Bottom > _worldHeight - WorldPadding) {
-            _worldHeight += WorldExpandStep;
-            grew = true;
-        }
-        if (grew) {
-            ApplyWorldSize();
-            Log($"EnsureWorldBoundsForRect grow | rect={R(rect)} world={F(_worldWidth)}x{F(_worldHeight)}");
-        }
-    }
-
-    private static void ShiftAllWorldContent(double dx, double dy) {
-        if (Math.Abs(dx) < 0.001 && Math.Abs(dy) < 0.001) return;
-        Log($"ShiftAllWorldContent start | shift=({F(dx)}, {F(dy)}) children={_mainCanvas?.Children.Count ?? 0} strokes={_mainCanvas?.Strokes.Count ?? 0}");
-
-        foreach (UIElement child in _mainCanvas.Children) {
-            if (child is FrameworkElement fe) {
-                double left = InkCanvas.GetLeft(fe);
-                double top = InkCanvas.GetTop(fe);
-                if (double.IsNaN(left)) left = 0;
-                if (double.IsNaN(top)) top = 0;
-                InkCanvas.SetLeft(fe, left + dx);
-                InkCanvas.SetTop(fe, top + dy);
-            }
-        }
-
-        foreach (var stroke in _mainCanvas.Strokes) {
-            var points = stroke.StylusPoints;
-            for (int i = 0; i < points.Count; i++) {
-                var p = points[i];
-                points[i] = new StylusPoint(p.X + dx, p.Y + dy, p.PressureFactor);
-            }
-        }
-
-        _lastImageRight += dx;
-        if (_isDraggingImage) {
-            _dragImageStartLeft += dx;
-            _dragImageStartTop += dy;
-            _dragStartCanvas = new Point(_dragStartCanvas.X + dx, _dragStartCanvas.Y + dy);
-        }
-        _canvasPan.X -= dx * _zoomLevel;
-        _canvasPan.Y -= dy * _zoomLevel;
-        LogCanvasState("ShiftAllWorldContent end");
     }
 
     private static bool TryGetImageAtPoint(Point canvasPoint, out Image hitImage) {
@@ -687,7 +499,6 @@ public static class JaazCoreCanvas
                 rotate.Angle += rotateDelta;
             }
             img.RenderTransform = group;
-            EnsureWorldBoundsForRect(GetElementWorldBounds(img));
         }
 
         UpdateSelectionPopbarPosition();
@@ -748,7 +559,7 @@ public static class JaazCoreCanvas
         foreach (var stroke in selectedStrokes) bounds.Union(stroke.GetBounds());
         if (bounds.IsEmpty) return;
 
-        Point canvasPos = CanvasToOverlayPoint(new Point(bounds.Left, bounds.Bottom));
+        Point canvasPos = _mainCanvas.TranslatePoint(new Point(bounds.Left, bounds.Bottom), _canvasOverlay);
         Canvas.SetLeft(_selectionPopbar, Math.Max(10, canvasPos.X));
         Canvas.SetTop(_selectionPopbar, Math.Max(10, canvasPos.Y + 10));
         _selectionPopbar.Visibility = Visibility.Visible;
@@ -908,15 +719,9 @@ public static class JaazCoreCanvas
     }
 
     private static void UpdateLastImagePosition() {
-        _lastImageRight = WorldPadding;
+        _lastImageRight = 50;
         foreach (UIElement child in _mainCanvas.Children) {
-            if (child is Image img) {
-                double left = InkCanvas.GetLeft(img);
-                if (double.IsNaN(left)) left = 0;
-                double width = img.ActualWidth > 0 ? img.ActualWidth : img.Width;
-                if (width <= 0) width = 400;
-                _lastImageRight = Math.Max(_lastImageRight, left + width + 20);
-            }
+            if (child is Image img) _lastImageRight = Math.Max(_lastImageRight, InkCanvas.GetLeft(img) + 420);
         }
     }
 
@@ -945,40 +750,14 @@ public static class JaazCoreCanvas
 
     private static void AddImageToCanvas(string path) {
         try {
-            LogCanvasState("AddImageToCanvas start");
-            Log("AddImageToCanvas source | path=" + path);
             var b = new BitmapImage(new Uri(path, UriKind.RelativeOrAbsolute));
-            double maxWidth = 400;
-            double sourceWidth = b.PixelWidth > 0 ? b.PixelWidth : maxWidth;
-            double sourceHeight = b.PixelHeight > 0 ? b.PixelHeight : maxWidth;
-            double drawWidth = Math.Min(maxWidth, sourceWidth);
-            double drawHeight = sourceHeight * (drawWidth / sourceWidth);
-            var img = new Image {
-                Source = b,
-                Width = drawWidth,
-                Height = drawHeight,
-                Stretch = Stretch.Fill
-            };
-            Point visibleAnchor = OverlayToCanvasPoint(new Point(120, 120));
-            double spawnX = Math.Max(_lastImageRight, visibleAnchor.X);
-            double spawnY = visibleAnchor.Y;
-            Log($"AddImageToCanvas place | pixel={sourceWidth}x{sourceHeight} draw={F(drawWidth)}x{F(drawHeight)} visibleAnchor={P(visibleAnchor)} spawn={P(new Point(spawnX, spawnY))}");
-            InkCanvas.SetLeft(img, spawnX);
-            InkCanvas.SetTop(img, spawnY);
-            _mainCanvas.Children.Add(img);
-            EnsureWorldBoundsForRect(GetElementWorldBounds(img));
-            _lastImageRight = Math.Max(_lastImageRight, InkCanvas.GetLeft(img) + drawWidth + 20);
-            var finalLeft = InkCanvas.GetLeft(img);
-            var finalTop = InkCanvas.GetTop(img);
-            var finalScreen = CanvasToOverlayPoint(new Point(finalLeft, finalTop));
-            Log($"AddImageToCanvas done | finalWorld={P(new Point(finalLeft, finalTop))} finalScreen={P(finalScreen)} nextLastImageRight={F(_lastImageRight)}");
-            LogCanvasState("AddImageToCanvas end");
+            var img = new Image { Source = b, Width = 400, Stretch = Stretch.Uniform };
+            InkCanvas.SetLeft(img, _lastImageRight); InkCanvas.SetTop(img, 100);
+            _mainCanvas.Children.Add(img); _lastImageRight += 420;
             var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
             if (selectTool != null) ActivateModeTool(selectTool);
             else ApplyCanvasMode(InkCanvasEditingMode.Select);
-        } catch (Exception ex) {
-            Log("AddImageToCanvas Error: " + ex.Message + " | path=" + path);
-        }
+        } catch {}
     }
 
     private static ToolbarIconInfo CreateModeToolbarIcon(string pathData, string tooltip, InkCanvasEditingMode mode) {
