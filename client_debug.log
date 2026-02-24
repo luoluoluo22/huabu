@@ -1,0 +1,189 @@
+[11:36:23.724] ShowMainWindow start
+[11:36:23.734] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:36:23.734] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:36:25.562] Tool click(border): Pan, requested=None, current=Select, active=Select
+[11:36:25.562] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:36:25.563] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:36:26.353] Tool click(border): Annotate, requested=Ink, current=None, active=None
+[11:36:26.353] ActivateModeTool: target=Ink, previous=None, modeTools=4
+[11:36:26.355] ApplyCanvasMode: None -> Ink, inkCanvasMode=Ink, focused=True
+[11:36:27.054] Action tool click(border): Image, current=Ink
+[11:36:29.379] Tool click(border): Eraser, requested=EraseByStroke, current=Ink, active=Ink
+[11:36:29.379] ActivateModeTool: target=EraseByStroke, previous=Ink, modeTools=4
+[11:36:29.379] ApplyCanvasMode: Ink -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[11:36:33.455] Tool click(border): Pan, requested=None, current=EraseByStroke, active=EraseByStroke
+[11:36:33.455] ActivateModeTool: target=None, previous=EraseByStroke, modeTools=4
+[11:36:33.455] ApplyCanvasMode: EraseByStroke -> None, inkCanvasMode=None, focused=True
+[11:36:34.848] Action tool click(border): Image, current=None
+[11:37:23.078] Tool click(border): Select, requested=Select, current=None, active=None
+[11:37:23.078] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:37:23.078] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:37:23.943] Tool click(border): Annotate, requested=Ink, current=Select, active=Select
+[11:37:23.943] ActivateModeTool: target=Ink, previous=Select, modeTools=4
+[11:37:23.945] ApplyCanvasMode: Select -> Ink, inkCanvasMode=Ink, focused=True
+[11:37:24.480] Action tool click(border): Image, current=Ink
+[11:37:26.146] Tool click(border): Eraser, requested=EraseByStroke, current=Ink, active=Ink
+[11:37:26.146] ActivateModeTool: target=EraseByStroke, previous=Ink, modeTools=4
+[11:37:26.146] ApplyCanvasMode: Ink -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[11:37:27.068] Action tool click(border): Clear, current=EraseByStroke
+[11:37:28.472] Tool click(border): Pan, requested=None, current=EraseByStroke, active=EraseByStroke
+[11:37:28.472] ActivateModeTool: target=None, previous=EraseByStroke, modeTools=4
+[11:37:28.473] ApplyCanvasMode: EraseByStroke -> None, inkCanvasMode=None, focused=True
+[11:37:28.799] Tool click(border): Select, requested=Select, current=None, active=None
+[11:37:28.799] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:37:28.800] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:37:29.388] Tool click(border): Annotate, requested=Ink, current=Select, active=Select
+[11:37:29.388] ActivateModeTool: target=Ink, previous=Select, modeTools=4
+[11:37:29.388] ApplyCanvasMode: Select -> Ink, inkCanvasMode=Ink, focused=True
+[11:37:29.737] Action tool click(border): Image, current=Ink
+[11:39:07.752] ShowMainWindow start
+[11:39:07.761] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:39:07.762] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:39:09.059] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:39:09.059] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:39:09.060] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:39:11.515] Tool click(border): Hand, requested=None, current=None, active=None
+[11:39:11.516] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:39:11.516] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:39:12.326] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:39:12.326] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:39:12.327] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:39:15.677] Action tool click(border): Image, current=None
+[11:39:17.980] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:39:17.981] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:39:19.318] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:39:19.318] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:39:19.319] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:39:33.296] Tool click(border): Select, requested=Select, current=None, active=None
+[11:39:33.296] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:39:33.296] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:39:35.237] Tool click(border): Annotate, requested=Ink, current=Select, active=Select
+[11:39:35.237] ActivateModeTool: target=Ink, previous=Select, modeTools=4
+[11:39:35.238] ApplyCanvasMode: Select -> Ink, inkCanvasMode=Ink, focused=True
+[11:39:37.251] Tool click(border): Select, requested=Select, current=Ink, active=Ink
+[11:39:37.251] ActivateModeTool: target=Select, previous=Ink, modeTools=4
+[11:39:37.251] ApplyCanvasMode: Ink -> Select, inkCanvasMode=Select, focused=True
+[11:39:40.971] Tool click(border): Eraser, requested=EraseByStroke, current=Select, active=Select
+[11:39:40.971] ActivateModeTool: target=EraseByStroke, previous=Select, modeTools=4
+[11:39:40.972] ApplyCanvasMode: Select -> EraseByStroke, inkCanvasMode=EraseByStroke, focused=True
+[11:39:43.108] Tool click(border): Hand, requested=None, current=EraseByStroke, active=EraseByStroke
+[11:39:43.108] ActivateModeTool: target=None, previous=EraseByStroke, modeTools=4
+[11:39:43.108] ApplyCanvasMode: EraseByStroke -> None, inkCanvasMode=None, focused=True
+[11:44:01.808] ShowMainWindow start
+[11:44:01.816] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:44:01.818] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:44:03.911] Action tool click(border): Image, current=Select
+[11:44:05.647] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:44:05.648] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:44:06.614] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:44:06.614] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:44:06.615] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:44:07.285] Pan start: p=(388.0,565.0), pan=(0.0,0.0)
+[11:44:08.159] Pan end: pan=(244.0,-23.0)
+[11:44:08.498] Pan start: p=(599.0,532.0), pan=(244.0,-23.0)
+[11:44:08.936] Pan end: pan=(266.0,11.0)
+[11:44:09.248] Pan start: p=(609.0,552.0), pan=(266.0,11.0)
+[11:44:09.953] Pan end: pan=(257.0,15.0)
+[11:44:10.340] Pan start: p=(598.0,556.0), pan=(257.0,15.0)
+[11:44:10.739] Pan end: pan=(256.0,14.0)
+[11:44:38.488] Pan start: p=(537.0,228.0), pan=(256.0,14.0)
+[11:44:39.438] Pan end: pan=(-79.0,3.0)
+[11:44:40.662] Pan start: p=(296.0,268.0), pan=(-79.0,3.0)
+[11:44:41.084] Pan end: pan=(242.0,193.0)
+[11:44:41.405] Pan start: p=(587.0,484.0), pan=(242.0,193.0)
+[11:44:41.867] Pan end: pan=(256.0,177.0)
+[11:45:10.547] ShowMainWindow start
+[11:45:10.556] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:45:10.557] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:45:11.947] Action tool click(border): Image, current=Select
+[11:45:13.568] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:45:13.569] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:45:15.578] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:45:15.579] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:45:15.579] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:45:15.958] Pan start: p=(304.0,590.0), pan=(0.0,0.0)
+[11:45:17.024] Pan end: pan=(273.0,14.0)
+[11:45:17.232] Pan start: p=(566.0,528.0), pan=(273.0,14.0)
+[11:45:24.527] Pan end: pan=(446.0,-128.0)
+[11:45:56.328] Pan start: p=(659.0,164.0), pan=(446.0,-128.0)
+[11:45:56.600] Pan end: pan=(454.0,-59.0)
+[11:45:56.878] Pan start: p=(692.0,238.0), pan=(454.0,-59.0)
+[11:45:58.100] Pan end: pan=(337.0,-127.0)
+[11:45:58.323] Pan start: p=(636.0,222.0), pan=(337.0,-127.0)
+[11:45:59.162] Pan end: pan=(233.0,-50.0)
+[11:45:59.381] Pan start: p=(551.0,323.0), pan=(233.0,-50.0)
+[11:45:59.780] Pan end: pan=(230.0,-56.0)
+[11:46:00.048] Pan start: p=(546.0,325.0), pan=(230.0,-56.0)
+[11:46:00.280] Pan end: pan=(240.0,-42.0)
+[11:46:30.601] ShowMainWindow start
+[11:46:30.609] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:46:30.610] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:46:32.168] Action tool click(border): Image, current=Select
+[11:46:33.703] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:46:33.704] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:46:35.226] Tool click(border): Hand, requested=None, current=Select, active=Select
+[11:46:35.226] ActivateModeTool: target=None, previous=Select, modeTools=4
+[11:46:35.226] ApplyCanvasMode: Select -> None, inkCanvasMode=None, focused=True
+[11:46:35.536] Pan start: p=(268.0,501.0), pan=(0.0,0.0)
+[11:46:38.817] Pan end: pan=(212.0,-32.0)
+[11:46:39.036] Pan start: p=(485.0,501.0), pan=(212.0,-32.0)
+[11:46:39.844] Pan end: pan=(184.0,-31.0)
+[11:46:40.405] Pan start: p=(463.0,491.0), pan=(184.0,-31.0)
+[11:46:40.795] Pan end: pan=(191.0,-31.0)
+[11:47:00.540] Pan start: p=(541.0,103.0), pan=(191.0,-31.0)
+[11:47:00.652] Pan end: pan=(191.0,-31.0)
+[11:47:01.797] Pan start: p=(491.0,441.0), pan=(191.0,-31.0)
+[11:47:01.896] Pan end: pan=(191.0,-31.0)
+[11:47:02.373] Pan start: p=(492.0,467.0), pan=(191.0,-31.0)
+[11:47:02.489] Pan end: pan=(191.0,-31.0)
+[11:47:03.161] Pan start: p=(487.0,463.0), pan=(191.0,-31.0)
+[11:47:04.155] Pan end: pan=(218.0,-65.0)
+[11:47:04.361] Pan start: p=(480.0,425.0), pan=(218.0,-65.0)
+[11:47:04.587] Pan end: pan=(232.0,-57.0)
+[11:47:05.379] Tool click(border): Select, requested=Select, current=None, active=None
+[11:47:05.379] ActivateModeTool: target=Select, previous=None, modeTools=4
+[11:47:05.380] ApplyCanvasMode: None -> Select, inkCanvasMode=Select, focused=True
+[11:51:04.677] ShowMainWindow start
+[11:51:04.686] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:51:04.687] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:51:06.729] Action tool click(border): Image, current=Select
+[11:51:08.703] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:51:08.705] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:51:09.737] Image drag start: left=50.0, top=100.0
+[11:51:09.819] Image transform end
+[11:51:13.068] Image drag start: left=50.0, top=100.0
+[11:51:13.486] Image transform end
+[11:51:13.739] Image drag start: left=160.0, top=77.0
+[11:51:13.949] Image transform end
+[11:51:31.534] Image drag start: left=218.0, top=57.0
+[11:51:31.835] Image transform end
+[11:52:04.436] Image drag start: left=238.0, top=36.0
+[11:52:04.502] Image transform end
+[11:52:04.840] Image drag start: left=238.0, top=36.0
+[11:52:05.100] Image transform end
+[11:52:05.483] Image drag start: left=344.0, top=40.0
+[11:52:05.766] Image transform end
+[11:52:06.348] Image drag start: left=349.0, top=-18.0
+[11:52:06.422] Image transform end
+[11:52:07.223] Image drag start: left=349.0, top=-18.0
+[11:52:07.301] Image transform end
+[11:52:10.246] Image drag start: left=349.0, top=-18.0
+[11:52:10.328] Image transform end
+[11:52:32.161] ShowMainWindow start
+[11:52:32.172] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:52:32.172] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=False
+[11:52:33.992] Action tool click(border): Image, current=Select
+[11:52:36.868] ActivateModeTool: target=Select, previous=Select, modeTools=4
+[11:52:36.869] ApplyCanvasMode: Select -> Select, inkCanvasMode=Select, focused=True
+[11:52:37.566] Image drag start: left=50.0, top=100.0
+[11:52:37.618] Image transform end
+[11:52:38.465] Image resize start: handle=BottomRight, left=50.0, top=100.0, width=400.0
+[11:52:39.869] Image transform end
+[11:52:40.950] Image drag start: left=50.0, top=100.0
+[11:52:41.567] Image transform end
+[11:52:41.963] Image drag start: left=64.0, top=128.0
+[11:52:42.478] Image transform end
+[11:52:42.717] Image drag start: left=82.0, top=148.0
+[11:52:43.063] Image transform end
+[11:52:44.239] Image resize start: handle=BottomRight, left=104.0, top=140.0, width=342.0
+[11:52:45.060] Image transform end
