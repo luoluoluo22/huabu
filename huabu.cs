@@ -119,6 +119,14 @@ public static class JaazCoreCanvas
     private static readonly ChatActionsHost _chatActions = new ChatActionsHost();
     private static bool _isRestoringState = false;
     private static string _pendingChatImagePath;
+    private enum UndoItemType { Stroke, Element }
+    private class UndoItem
+    {
+        public UndoItemType Type { get; set; }
+        public System.Windows.Ink.Stroke Stroke { get; set; }
+        public UIElement Element { get; set; }
+    }
+    private static readonly Stack<UndoItem> _redoStack = new Stack<UndoItem>();
 
     private static string _apiUrl = "http://127.0.0.1:55557/v1/chat/completions";
     private static string _modelName = "gemini-3-flash";
@@ -207,6 +215,7 @@ public static class JaazCoreCanvas
         };
         _mainCanvas.DefaultDrawingAttributes.Color = Colors.Cyan;
         _mainCanvas.SelectionChanged += OnCanvasSelectionChanged;
+        _mainCanvas.StrokeCollected += (s, e) => _redoStack.Clear();
 
         // Keep overlay interactive for its children (popbar), but let empty space pass mouse
         // events through to InkCanvas so drag-selection works.
@@ -240,14 +249,17 @@ public static class JaazCoreCanvas
         };
 
         window.KeyDown += (s, e) => {
-            if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) {
-                if (_mainCanvas.Strokes.Count > 0) _mainCanvas.Strokes.RemoveAt(_mainCanvas.Strokes.Count - 1);
-                else if (_mainCanvas.Children.Count > 0) {
-                    _mainCanvas.Children.RemoveAt(_mainCanvas.Children.Count - 1);
-                    UpdateLastImagePosition();
-                }
-                SaveState();
+            bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+            if (!ctrl || e.Key != Key.Z) return;
+
+            if (shift) {
+                RedoLastUndo();
+            } else {
+                UndoLastAction();
             }
+            SaveState();
+            e.Handled = true;
         };
 
         _selectionPopbar = CreateSelectionPopbar();
@@ -282,6 +294,7 @@ public static class JaazCoreCanvas
         var imageTool = CreateActionToolbarIcon(pathImage, "Image", () => UploadImage());
         var eraserTool = CreateModeToolbarIcon(pathEraser, "Eraser", InkCanvasEditingMode.EraseByStroke);
         var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); SaveState(); });
+        clearTool.PreviewMouseLeftButtonDown += (s, e) => _redoStack.Clear();
 
         toolStack.Children.Add(panTool.Border);
         toolStack.Children.Add(selectTool.Border);
@@ -818,16 +831,42 @@ public static class JaazCoreCanvas
     }
 
     private static void UpdateLastImagePosition() {
-        _lastImageRight = 50;
+        GetRightmostImagePlacement(out var nextLeft, out _);
+        _lastImageRight = nextLeft;
+    }
+
+    private static void GetRightmostImagePlacement(out double nextLeft, out double baselineTop) {
+        double maxRight = 50;
+        double topForRightmost = 100;
         foreach (UIElement child in _mainCanvas.Children) {
-            if (child is Image img) {
-                double left = InkCanvas.GetLeft(img);
-                if (double.IsNaN(left)) left = 0;
-                double width = img.ActualWidth > 0 ? img.ActualWidth : img.Width;
-                if (width <= 0) width = 400;
-                _lastImageRight = Math.Max(_lastImageRight, left + width + 20);
+            if (!(child is Image img)) continue;
+            double left = InkCanvas.GetLeft(img);
+            double top = InkCanvas.GetTop(img);
+            if (double.IsNaN(left)) left = 0;
+            if (double.IsNaN(top)) top = 0;
+            double w = img.ActualWidth > 0 ? img.ActualWidth : img.Width;
+            double h = img.ActualHeight > 0 ? img.ActualHeight : img.Height;
+            if (w <= 0) w = 400;
+            if (h <= 0) h = 400;
+
+            Rect bounds = new Rect(left, top, w, h);
+            try {
+                if (img.Parent == _mainCanvas) {
+                    var transformed = img.TransformToAncestor(_mainCanvas).TransformBounds(new Rect(0, 0, w, h));
+                    if (!transformed.IsEmpty && transformed.Width > 0 && transformed.Height > 0) {
+                        bounds = transformed;
+                    }
+                }
+            } catch {}
+
+            double candidateRight = bounds.Right + 20;
+            if (candidateRight > maxRight) {
+                maxRight = candidateRight;
+                topForRightmost = top;
             }
         }
+        nextLeft = maxRight;
+        baselineTop = topForRightmost;
     }
 
     private static FrameworkElement CreateChatInputArea() {
@@ -933,8 +972,11 @@ public static class JaazCoreCanvas
             var b = new BitmapImage(new Uri(path, UriKind.RelativeOrAbsolute));
             double targetWidth = width ?? 400;
             var img = new Image { Source = b, Width = targetWidth, Stretch = Stretch.Uniform, Tag = path };
-            double targetLeft = left ?? _lastImageRight;
-            double targetTop = top ?? 100;
+            double computedLeft = _lastImageRight;
+            double computedTop = 100;
+            GetRightmostImagePlacement(out computedLeft, out computedTop);
+            double targetLeft = left ?? computedLeft;
+            double targetTop = top ?? computedTop;
             InkCanvas.SetLeft(img, targetLeft);
             InkCanvas.SetTop(img, targetTop);
 
@@ -945,6 +987,7 @@ public static class JaazCoreCanvas
             img.RenderTransform = group;
 
             _mainCanvas.Children.Add(img);
+            _redoStack.Clear();
             _lastImageRight = Math.Max(_lastImageRight, targetLeft + targetWidth + 20);
             if (activateSelect) {
                 var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
@@ -980,6 +1023,34 @@ public static class JaazCoreCanvas
         for (int i = 0; i < selectedImages.Count; i++) {
             string file = Path.Combine(targetDir, $"canvas_image_{i + 1}.png");
             SaveImageToFile(selectedImages[i], file);
+        }
+    }
+
+    private static void UndoLastAction() {
+        if (_mainCanvas.Strokes.Count > 0) {
+            var stroke = _mainCanvas.Strokes[_mainCanvas.Strokes.Count - 1];
+            _mainCanvas.Strokes.RemoveAt(_mainCanvas.Strokes.Count - 1);
+            _redoStack.Push(new UndoItem { Type = UndoItemType.Stroke, Stroke = stroke });
+            return;
+        }
+        if (_mainCanvas.Children.Count > 0) {
+            var element = _mainCanvas.Children[_mainCanvas.Children.Count - 1];
+            _mainCanvas.Children.RemoveAt(_mainCanvas.Children.Count - 1);
+            _redoStack.Push(new UndoItem { Type = UndoItemType.Element, Element = element });
+            UpdateLastImagePosition();
+        }
+    }
+
+    private static void RedoLastUndo() {
+        if (_redoStack.Count == 0) return;
+        var item = _redoStack.Pop();
+        if (item.Type == UndoItemType.Stroke && item.Stroke != null) {
+            _mainCanvas.Strokes.Add(item.Stroke);
+            return;
+        }
+        if (item.Type == UndoItemType.Element && item.Element != null) {
+            _mainCanvas.Children.Add(item.Element);
+            UpdateLastImagePosition();
         }
     }
 
