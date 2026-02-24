@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Input;
+using System.Windows.Data;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -37,8 +38,53 @@ public class ChatMessage : INotifyPropertyChanged
     protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+public class PersistedChatMessage
+{
+    public string Role { get; set; }
+    public string Content { get; set; }
+    public string ImageUrl { get; set; }
+}
+
+public class PersistedCanvasImage
+{
+    public string Path { get; set; }
+    public double Left { get; set; }
+    public double Top { get; set; }
+    public double Width { get; set; }
+    public double ScaleX { get; set; } = 1;
+    public double ScaleY { get; set; } = 1;
+    public double Rotation { get; set; } = 0;
+}
+
+public class PersistedCanvasState
+{
+    public List<PersistedChatMessage> ChatHistory { get; set; } = new List<PersistedChatMessage>();
+    public List<PersistedCanvasImage> CanvasImages { get; set; } = new List<PersistedCanvasImage>();
+}
+
 public static class JaazCoreCanvas
 {
+    private class RelayCommand : ICommand
+    {
+        private readonly Action<object> _execute;
+        private readonly Func<object, bool> _canExecute;
+        public RelayCommand(Action<object> execute, Func<object, bool> canExecute = null)
+        {
+            _execute = execute;
+            _canExecute = canExecute;
+        }
+        public bool CanExecute(object parameter) => _canExecute == null || _canExecute(parameter);
+        public void Execute(object parameter) => _execute(parameter);
+        public event EventHandler CanExecuteChanged { add { } remove { } }
+    }
+
+    private class ChatActionsHost
+    {
+        public ICommand DeleteMessageCommand { get; set; }
+        public ICommand CopyMessageCommand { get; set; }
+        public ICommand ResendMessageCommand { get; set; }
+    }
+
     private class ToolbarIconInfo
     {
         public Border Border { get; set; }
@@ -54,6 +100,7 @@ public static class JaazCoreCanvas
     private static Border _selectionPopbar;
     private static TextBox _popbarInput;
     private static Canvas _canvasOverlay;
+    private static TextBlock _chatImageHint;
     private const double VirtualCanvasWidth = 8000;
     private const double VirtualCanvasHeight = 8000;
     private static ScaleTransform _canvasScale = new ScaleTransform(1, 1);
@@ -69,6 +116,9 @@ public static class JaazCoreCanvas
     private static InkCanvasEditingMode _currentMode = InkCanvasEditingMode.Select;
     private static readonly List<ToolbarIconInfo> _modeTools = new List<ToolbarIconInfo>();
     private static ToolbarIconInfo _activeModeTool;
+    private static readonly ChatActionsHost _chatActions = new ChatActionsHost();
+    private static bool _isRestoringState = false;
+    private static string _pendingChatImagePath;
 
     private static string _apiUrl = "http://127.0.0.1:55557/v1/chat/completions";
     private static string _modelName = "gemini-3-flash";
@@ -81,6 +131,7 @@ public static class JaazCoreCanvas
 
     private static readonly string LogDir = @"F:\Desktop\kaifa\huabu";
     private static readonly string LogFile = Path.Combine(LogDir, "client_debug.log");
+    private static readonly string StateFile = Path.Combine(LogDir, "canvas_state.json");
 
     public static void Exec(IStepContext context)
     {
@@ -105,9 +156,10 @@ public static class JaazCoreCanvas
 
     public static void ShowMainWindow()
     {
-        // Static collection persists across window instances; reset per launch to avoid duplicated welcome messages.
+        EnsureChatActionsInitialized();
         _chatHistory.Clear();
         Log("ShowMainWindow start");
+        var persistedState = LoadState();
 
         var window = new Window
         {
@@ -194,6 +246,7 @@ public static class JaazCoreCanvas
                     _mainCanvas.Children.RemoveAt(_mainCanvas.Children.Count - 1);
                     UpdateLastImagePosition();
                 }
+                SaveState();
             }
         };
 
@@ -228,7 +281,7 @@ public static class JaazCoreCanvas
         var penTool = CreateModeToolbarIcon(pathPen, "Annotate", InkCanvasEditingMode.Ink);
         var imageTool = CreateActionToolbarIcon(pathImage, "Image", () => UploadImage());
         var eraserTool = CreateModeToolbarIcon(pathEraser, "Eraser", InkCanvasEditingMode.EraseByStroke);
-        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); });
+        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); SaveState(); });
 
         toolStack.Children.Add(panTool.Border);
         toolStack.Children.Add(selectTool.Border);
@@ -249,7 +302,7 @@ public static class JaazCoreCanvas
         sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         sidebarGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _chatScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        var itemsControl = new ItemsControl { ItemsSource = _chatHistory };
+        var itemsControl = new ItemsControl { ItemsSource = _chatHistory, DataContext = _chatActions };
         itemsControl.ItemTemplate = CreateMessageTemplate();
         _chatScroll.Content = itemsControl;
         var inputArea = CreateChatInputArea();
@@ -261,8 +314,12 @@ public static class JaazCoreCanvas
         rootGrid.Children.Add(topBarBorder); rootGrid.Children.Add(mainGrid);
 
         window.Content = rootGrid;
+        window.Closing += (s, e) => SaveState();
         window.Show();
-        AddMessage("Assistant", "System ready. Select elements and generate. Ctrl + mouse wheel to zoom.");
+        RestoreState(persistedState);
+        if (_chatHistory.Count == 0) {
+            AddMessage("Assistant", "System ready. Select elements and generate. Ctrl + mouse wheel to zoom.");
+        }
     }
 
     private static Border CreateSelectionPopbar() {
@@ -298,16 +355,32 @@ public static class JaazCoreCanvas
 
         _popbarInput.KeyDown += (s, e) => { if (e.Key == Key.Enter) HandleSelectedContentRequest(); };
         
+        var btnDownload = new Button {
+            Content = "Download",
+            Height = 30,
+            Margin = new Thickness(0, 5, 8, 0),
+            Background = new SolidColorBrush(Color.FromRgb(70, 70, 90)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            MinWidth = 90
+        };
+        btnDownload.Click += (s, e) => DownloadSelectedImages();
+
         var btnAction = new Button { 
             Content = "Generate", 
             Height = 30, Margin = new Thickness(0,5,0,0),
             Background = new SolidColorBrush(Color.FromRgb(60, 120, 240)), 
-            Foreground = Brushes.White, BorderThickness = new Thickness(0) 
+            Foreground = Brushes.White, BorderThickness = new Thickness(0),
+            MinWidth = 90
         };
         btnAction.Click += (s, e) => HandleSelectedContentRequest();
-        
+
+        var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        actionsRow.Children.Add(btnDownload);
+        actionsRow.Children.Add(btnAction);
+
         stack.Children.Add(grid);
-        stack.Children.Add(btnAction);
+        stack.Children.Add(actionsRow);
         border.Child = stack;
         return border;
     }
@@ -338,7 +411,17 @@ public static class JaazCoreCanvas
         Point canvasPoint = _canvasOverlay.TranslatePoint(overlayPoint, _mainCanvas);
 
         if (TryGetImageAtPoint(canvasPoint, out var hitImage)) {
+            bool ctrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
             var selectedElements = _mainCanvas.GetSelectedElements();
+            if (ctrlPressed) {
+                var next = selectedElements.OfType<UIElement>().ToList();
+                if (next.Contains(hitImage)) next.Remove(hitImage);
+                else next.Add(hitImage);
+                _mainCanvas.Select(new System.Windows.Ink.StrokeCollection(), next);
+                e.Handled = true;
+                return;
+            }
+
             if (!selectedElements.Contains(hitImage) || selectedElements.Count != 1 || _mainCanvas.GetSelectedStrokes().Count > 0) {
                 _mainCanvas.Select(new System.Windows.Ink.StrokeCollection(), new List<UIElement> { hitImage });
             }
@@ -424,6 +507,7 @@ public static class JaazCoreCanvas
             _draggingImage = null;
             _mainCanvas.ReleaseMouseCapture();
             UpdateSelectionPopbarPosition();
+            SaveState();
             e.Handled = true;
             return;
         }
@@ -502,6 +586,7 @@ public static class JaazCoreCanvas
         }
 
         UpdateSelectionPopbarPosition();
+        SaveState();
         return true;
     }
 
@@ -649,9 +734,19 @@ public static class JaazCoreCanvas
 
     private static async void HandleAiRequest(string prompt = null, string base64Img = null, bool selectionMode = false) {
         string text = prompt ?? _inputBox.Text.Trim();
+        string chatImagePath = null;
+        if (prompt == null && string.IsNullOrEmpty(base64Img) && !string.IsNullOrEmpty(_pendingChatImagePath) && File.Exists(_pendingChatImagePath)) {
+            base64Img = Convert.ToBase64String(File.ReadAllBytes(_pendingChatImagePath));
+            chatImagePath = _pendingChatImagePath;
+        }
         if (string.IsNullOrEmpty(text) && base64Img == null) return;
         
-        if (prompt == null) { AddMessage("User", text); _inputBox.Clear(); }
+        if (prompt == null) {
+            AddMessage("User", text, chatImagePath);
+            _inputBox.Clear();
+            _pendingChatImagePath = null;
+            UpdateChatImageHint();
+        }
         
         var assistantMsg = new ChatMessage { Role = "Assistant", Content = "", BgColor = new SolidColorBrush(Color.FromRgb(50, 50, 55)), Alignment = HorizontalAlignment.Left };
         _chatHistory.Add(assistantMsg); _chatScroll.ScrollToEnd();
@@ -715,24 +810,100 @@ public static class JaazCoreCanvas
                     ParseAndCleanImagesFromMessage(assistantMsg);
                 }
             }
-        } catch (Exception ex) { assistantMsg.Content = "Error: " + ex.Message; }
+            SaveState();
+        } catch (Exception ex) {
+            assistantMsg.Content = "Error: " + ex.Message;
+            SaveState();
+        }
     }
 
     private static void UpdateLastImagePosition() {
         _lastImageRight = 50;
         foreach (UIElement child in _mainCanvas.Children) {
-            if (child is Image img) _lastImageRight = Math.Max(_lastImageRight, InkCanvas.GetLeft(img) + 420);
+            if (child is Image img) {
+                double left = InkCanvas.GetLeft(img);
+                if (double.IsNaN(left)) left = 0;
+                double width = img.ActualWidth > 0 ? img.ActualWidth : img.Width;
+                if (width <= 0) width = 400;
+                _lastImageRight = Math.Max(_lastImageRight, left + width + 20);
+            }
         }
     }
 
     private static FrameworkElement CreateChatInputArea() {
-        var stack = new StackPanel { Margin = new Thickness(10) };
-        _inputBox = new TextBox { Height = 60, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, Background = new SolidColorBrush(Color.FromRgb(35,35,40)), Foreground = Brushes.White, BorderThickness = new Thickness(0), Padding = new Thickness(5), CaretBrush = Brushes.Cyan };
-        _inputBox.PreviewKeyDown += (s, e) => { if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None) { HandleAiRequest(); e.Handled = true; } };
-        var btnSend = new Button { Content = "Send", Height = 30, Margin = new Thickness(0, 5, 0, 0), Background = new SolidColorBrush(Color.FromRgb(60, 120, 240)), Foreground = Brushes.White, BorderThickness = new Thickness(0) };
+        var root = new Border {
+            Margin = new Thickness(10),
+            Background = new SolidColorBrush(Color.FromRgb(35, 35, 40)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(8)
+        };
+        var layout = new Grid();
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(60) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        _inputBox = new TextBox {
+            TextWrapping = TextWrapping.Wrap,
+            AcceptsReturn = true,
+            Background = Brushes.Transparent,
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(0),
+            CaretBrush = Brushes.Cyan
+        };
+        _inputBox.PreviewKeyDown += (s, e) => {
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None) {
+                HandleAiRequest();
+                e.Handled = true;
+            }
+        };
+
+        var footer = new Grid { Margin = new Thickness(0, 8, 0, 0), Background = Brushes.Transparent };
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var leftPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        var btnAttachImage = new Button {
+            Content = "Image",
+            Height = 30,
+            Width = 60,
+            Background = new SolidColorBrush(Color.FromRgb(52, 52, 58)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0)
+        };
+        btnAttachImage.Click += (s, e) => AttachImageForChat();
+        _chatImageHint = new TextBlock {
+            Foreground = Brushes.LightGray,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Width = 150
+        };
+        leftPanel.Children.Add(btnAttachImage);
+        leftPanel.Children.Add(_chatImageHint);
+
+        var btnSend = new Button {
+            Content = "Send",
+            Height = 30,
+            Width = 80,
+            Background = new SolidColorBrush(Color.FromRgb(60, 120, 240)),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
         btnSend.Click += (s, e) => HandleAiRequest();
-        stack.Children.Add(_inputBox); stack.Children.Add(btnSend);
-        return stack;
+
+        Grid.SetColumn(leftPanel, 0);
+        Grid.SetColumn(btnSend, 1);
+        footer.Children.Add(leftPanel);
+        footer.Children.Add(btnSend);
+
+        Grid.SetRow(_inputBox, 0);
+        Grid.SetRow(footer, 1);
+        layout.Children.Add(_inputBox);
+        layout.Children.Add(footer);
+        root.Child = layout;
+        UpdateChatImageHint();
+        return root;
     }
 
     private static void ParseAndCleanImagesFromMessage(ChatMessage msg) {
@@ -748,15 +919,199 @@ public static class JaazCoreCanvas
         }
     }
 
-    private static void AddImageToCanvas(string path) {
+    private static void AddImageToCanvas(
+        string path,
+        double? left = null,
+        double? top = null,
+        double? width = null,
+        double? scaleX = null,
+        double? scaleY = null,
+        double? rotation = null,
+        bool persistState = true,
+        bool activateSelect = true) {
         try {
             var b = new BitmapImage(new Uri(path, UriKind.RelativeOrAbsolute));
-            var img = new Image { Source = b, Width = 400, Stretch = Stretch.Uniform };
-            InkCanvas.SetLeft(img, _lastImageRight); InkCanvas.SetTop(img, 100);
-            _mainCanvas.Children.Add(img); _lastImageRight += 420;
-            var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
-            if (selectTool != null) ActivateModeTool(selectTool);
-            else ApplyCanvasMode(InkCanvasEditingMode.Select);
+            double targetWidth = width ?? 400;
+            var img = new Image { Source = b, Width = targetWidth, Stretch = Stretch.Uniform, Tag = path };
+            double targetLeft = left ?? _lastImageRight;
+            double targetTop = top ?? 100;
+            InkCanvas.SetLeft(img, targetLeft);
+            InkCanvas.SetTop(img, targetTop);
+
+            var group = EnsureImageTransformGroup(img, out var s, out var r);
+            s.ScaleX = scaleX ?? 1;
+            s.ScaleY = scaleY ?? 1;
+            r.Angle = rotation ?? 0;
+            img.RenderTransform = group;
+
+            _mainCanvas.Children.Add(img);
+            _lastImageRight = Math.Max(_lastImageRight, targetLeft + targetWidth + 20);
+            if (activateSelect) {
+                var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
+                if (selectTool != null) ActivateModeTool(selectTool);
+                else ApplyCanvasMode(InkCanvasEditingMode.Select);
+            }
+            if (persistState) SaveState();
+        } catch {}
+    }
+
+    private static void DownloadSelectedImages() {
+        var selectedImages = _mainCanvas.GetSelectedElements().OfType<Image>().ToList();
+        if (selectedImages.Count == 0) return;
+
+        if (selectedImages.Count == 1) {
+            var sfd = new SaveFileDialog {
+                Filter = "PNG Image|*.png|JPEG Image|*.jpg",
+                FileName = "canvas_image.png"
+            };
+            if (sfd.ShowDialog() == true) {
+                SaveImageToFile(selectedImages[0], sfd.FileName);
+            }
+            return;
+        }
+
+        var multiSave = new SaveFileDialog {
+            Filter = "PNG Image|*.png",
+            FileName = "canvas_image_1.png"
+        };
+        if (multiSave.ShowDialog() != true) return;
+        string targetDir = Path.GetDirectoryName(multiSave.FileName);
+        if (string.IsNullOrEmpty(targetDir)) return;
+        for (int i = 0; i < selectedImages.Count; i++) {
+            string file = Path.Combine(targetDir, $"canvas_image_{i + 1}.png");
+            SaveImageToFile(selectedImages[i], file);
+        }
+    }
+
+    private static void SaveImageToFile(Image image, string filePath) {
+        try {
+            if (!(image.Source is BitmapSource src)) return;
+            BitmapEncoder encoder = Path.GetExtension(filePath).ToLowerInvariant() == ".jpg"
+                ? (BitmapEncoder)new JpegBitmapEncoder()
+                : new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(src));
+            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write)) {
+                encoder.Save(fs);
+            }
+        } catch {}
+    }
+
+    private static void AttachImageForChat() {
+        var d = new OpenFileDialog { Filter = "Image Files|*.png;*.jpg;*.jpeg" };
+        if (d.ShowDialog() == true) {
+            _pendingChatImagePath = d.FileName;
+            UpdateChatImageHint();
+        }
+    }
+
+    private static void UpdateChatImageHint() {
+        if (_chatImageHint == null) return;
+        _chatImageHint.Text = string.IsNullOrEmpty(_pendingChatImagePath) ? "" : Path.GetFileName(_pendingChatImagePath);
+        _chatImageHint.ToolTip = _pendingChatImagePath;
+    }
+
+    private static void EnsureChatActionsInitialized() {
+        if (_chatActions.DeleteMessageCommand != null) return;
+        _chatActions.DeleteMessageCommand = new RelayCommand(p => {
+            if (!(p is ChatMessage msg)) return;
+            _chatHistory.Remove(msg);
+            SaveState();
+        });
+        _chatActions.CopyMessageCommand = new RelayCommand(p => {
+            if (!(p is ChatMessage msg)) return;
+            try { Clipboard.SetText(msg.Content ?? ""); } catch {}
+        });
+        _chatActions.ResendMessageCommand = new RelayCommand(p => {
+            if (!(p is ChatMessage msg)) return;
+            if (!string.Equals(msg.Role, "User", StringComparison.OrdinalIgnoreCase)) return;
+            string img = msg.ImageUrl;
+            string base64 = null;
+            if (!string.IsNullOrEmpty(img) && File.Exists(img)) {
+                base64 = Convert.ToBase64String(File.ReadAllBytes(img));
+            }
+            HandleAiRequest(msg.Content, base64, false);
+        });
+    }
+
+    private static PersistedCanvasState LoadState() {
+        try {
+            if (!File.Exists(StateFile)) return new PersistedCanvasState();
+            string json = File.ReadAllText(StateFile);
+            var state = Newtonsoft.Json.JsonConvert.DeserializeObject<PersistedCanvasState>(json);
+            return state ?? new PersistedCanvasState();
+        } catch {
+            return new PersistedCanvasState();
+        }
+    }
+
+    private static void RestoreState(PersistedCanvasState state) {
+        if (state == null) return;
+        _isRestoringState = true;
+        try {
+            _chatHistory.Clear();
+            foreach (var m in state.ChatHistory ?? new List<PersistedChatMessage>()) {
+                _chatHistory.Add(new ChatMessage {
+                    Role = m.Role ?? "Assistant",
+                    Content = m.Content ?? "",
+                    ImageUrl = m.ImageUrl,
+                    BgColor = (m.Role ?? "") == "User" ? new SolidColorBrush(Color.FromRgb(40, 50, 80)) : new SolidColorBrush(Color.FromRgb(50, 50, 55)),
+                    Alignment = (m.Role ?? "") == "User" ? HorizontalAlignment.Right : HorizontalAlignment.Left
+                });
+            }
+
+            _mainCanvas.Strokes.Clear();
+            _mainCanvas.Children.Clear();
+            foreach (var c in state.CanvasImages ?? new List<PersistedCanvasImage>()) {
+                if (string.IsNullOrEmpty(c.Path)) continue;
+                AddImageToCanvas(c.Path, c.Left, c.Top, c.Width, c.ScaleX, c.ScaleY, c.Rotation, false, false);
+            }
+            UpdateLastImagePosition();
+            _chatScroll?.ScrollToEnd();
+        } finally {
+            _isRestoringState = false;
+        }
+    }
+
+    private static void SaveState() {
+        if (_isRestoringState) return;
+        try {
+            Directory.CreateDirectory(LogDir);
+            var state = new PersistedCanvasState();
+            foreach (var msg in _chatHistory) {
+                state.ChatHistory.Add(new PersistedChatMessage {
+                    Role = msg.Role,
+                    Content = msg.Content,
+                    ImageUrl = msg.ImageUrl
+                });
+            }
+
+            foreach (var img in _mainCanvas.Children.OfType<Image>()) {
+                double left = InkCanvas.GetLeft(img);
+                double top = InkCanvas.GetTop(img);
+                if (double.IsNaN(left)) left = 0;
+                if (double.IsNaN(top)) top = 0;
+                double width = img.ActualWidth > 0 ? img.ActualWidth : img.Width;
+                if (width <= 0) width = 400;
+
+                double scaleX = 1, scaleY = 1, rotation = 0;
+                if (img.RenderTransform is TransformGroup tg) {
+                    foreach (var t in tg.Children) {
+                        if (t is ScaleTransform st) { scaleX = st.ScaleX; scaleY = st.ScaleY; }
+                        if (t is RotateTransform rt) rotation = rt.Angle;
+                    }
+                }
+                state.CanvasImages.Add(new PersistedCanvasImage {
+                    Path = img.Tag as string,
+                    Left = left,
+                    Top = top,
+                    Width = width,
+                    ScaleX = scaleX,
+                    ScaleY = scaleY,
+                    Rotation = rotation
+                });
+            }
+
+            File.WriteAllText(StateFile, Newtonsoft.Json.JsonConvert.SerializeObject(state, Newtonsoft.Json.Formatting.Indented));
         } catch {}
     }
 
@@ -872,8 +1227,53 @@ public static class JaazCoreCanvas
     private static DataTemplate CreateMessageTemplate() {
         return (DataTemplate)System.Windows.Markup.XamlReader.Parse(@"
         <DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
-            <Border Background='{Binding BgColor}' CornerRadius='10' Padding='10' Margin='5' HorizontalAlignment='{Binding Alignment}' MaxWidth='350'>
-                <StackPanel><TextBlock Text='{Binding Role}' FontWeight='Bold' Foreground='Gray' FontSize='10' Margin='0,0,0,3'/><TextBlock Text='{Binding Content}' Foreground='White' TextWrapping='Wrap' FontSize='13' /><Image Source='{Binding ImageUrl}' MaxWidth='320' Margin='0,8,0,0'><Image.Style><Style TargetType='Image'><Setter Property='Visibility' Value='Visible'/><Style.Triggers><DataTrigger Binding='{Binding ImageUrl}' Value='{x:Null}'><Setter Property='Visibility' Value='Collapsed'/></DataTrigger><DataTrigger Binding='{Binding ImageUrl}' Value=''><Setter Property='Visibility' Value='Collapsed'/></DataTrigger></Style.Triggers></Style></Image.Style></Image></StackPanel>
+            <Border x:Name='Card' Background='{Binding BgColor}' CornerRadius='10' Padding='10' Margin='5' HorizontalAlignment='{Binding Alignment}' MaxWidth='350'>
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text='{Binding Role}' FontWeight='Bold' Foreground='Gray' FontSize='10' Margin='0,0,0,3'/>
+                        <TextBlock Text='{Binding Content}' Foreground='White' TextWrapping='Wrap' FontSize='13' />
+                        <Image Source='{Binding ImageUrl}' MaxWidth='320' Margin='0,8,0,0'>
+                            <Image.Style>
+                                <Style TargetType='Image'>
+                                    <Setter Property='Visibility' Value='Visible'/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding='{Binding ImageUrl}' Value='{x:Null}'><Setter Property='Visibility' Value='Collapsed'/></DataTrigger>
+                                        <DataTrigger Binding='{Binding ImageUrl}' Value=''><Setter Property='Visibility' Value='Collapsed'/></DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Image.Style>
+                        </Image>
+                    </StackPanel>
+                    <StackPanel Orientation='Horizontal' HorizontalAlignment='Right' VerticalAlignment='Top'>
+                        <StackPanel.Style>
+                            <Style TargetType='StackPanel'>
+                                <Setter Property='Visibility' Value='Collapsed'/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding='{Binding IsMouseOver, ElementName=Card}' Value='True'>
+                                        <Setter Property='Visibility' Value='Visible'/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Button Content='Copy' Margin='0,0,4,0' Padding='6,2' Background='#333' Foreground='White' BorderThickness='0'
+                                Command='{Binding DataContext.CopyMessageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}' CommandParameter='{Binding}'/>
+                        <Button Content='Resend' Margin='0,0,4,0' Padding='6,2' Background='#2D4A7A' Foreground='White' BorderThickness='0'
+                                Command='{Binding DataContext.ResendMessageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}' CommandParameter='{Binding}'>
+                            <Button.Style>
+                                <Style TargetType='Button'>
+                                    <Setter Property='Visibility' Value='Collapsed'/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding='{Binding Role}' Value='User'>
+                                            <Setter Property='Visibility' Value='Visible'/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content='Delete' Padding='6,2' Background='#6A2D2D' Foreground='White' BorderThickness='0'
+                                Command='{Binding DataContext.DeleteMessageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}' CommandParameter='{Binding}'/>
+                    </StackPanel>
+                </Grid>
             </Border>
         </DataTemplate>");
     }
@@ -887,6 +1287,7 @@ public static class JaazCoreCanvas
             Alignment = r == "User" ? HorizontalAlignment.Right : HorizontalAlignment.Left
         });
         _chatScroll?.ScrollToEnd();
+        SaveState();
     }
     private static void UploadImage() { var d = new OpenFileDialog { Filter = "Image Files|*.png;*.jpg;*.jpeg" }; if (d.ShowDialog() == true) AddImageToCanvas(d.FileName); }
     private static bool IsImagePath(string p) { if (string.IsNullOrEmpty(p)) return false; string e = Path.GetExtension(p).ToLower(); return e == ".jpg" || e == ".jpeg" || e == ".png"; }
