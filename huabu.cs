@@ -14,7 +14,6 @@ using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Linq;
 using System.Net.Http.Headers;
-using System.Windows.Threading;
 using Microsoft.Win32;
 using Quicker.Public;
 
@@ -40,24 +39,6 @@ public class ChatMessage : INotifyPropertyChanged
 
 public static class JaazCoreCanvas
 {
-    private class PersistedCanvasState
-    {
-        public double Zoom { get; set; } = 1.0;
-        public double PanX { get; set; }
-        public double PanY { get; set; }
-        public string StrokeDataBase64 { get; set; }
-        public List<PersistedImageItem> Images { get; set; } = new List<PersistedImageItem>();
-    }
-
-    private class PersistedImageItem
-    {
-        public string SourcePath { get; set; }
-        public double Left { get; set; }
-        public double Top { get; set; }
-        public double Width { get; set; }
-        public double? Height { get; set; }
-    }
-
     private class ToolbarIconInfo
     {
         public Border Border { get; set; }
@@ -67,50 +48,27 @@ public static class JaazCoreCanvas
 
     private static ObservableCollection<ChatMessage> _chatHistory = new ObservableCollection<ChatMessage>();
     private static InkCanvas _mainCanvas;
-    private static Grid _canvasHost;
     private static TextBox _inputBox;
     private static ScrollViewer _chatScroll;
     private static TextBlock _txtZoom;
     private static Border _selectionPopbar;
     private static TextBox _popbarInput;
     private static Canvas _canvasOverlay;
+    private const double VirtualCanvasWidth = 2000;
+    private const double VirtualCanvasHeight = 2000;
     private static ScaleTransform _canvasScale = new ScaleTransform(1, 1);
-    private static ScaleTransform _overlayScale = new ScaleTransform(1, 1);
-    private static TranslateTransform _canvasPan = new TranslateTransform(0, 0);
-    private static TranslateTransform _overlayPan = new TranslateTransform(0, 0);
     private static readonly HttpClient _httpClient = new HttpClient();
     private static bool _isMarqueeSelecting = false;
-    private static bool _isCanvasPanning = false;
-    private static bool _isSpacePressed = false;
-    private static bool _isImageDragging = false;
-    private static bool _isImageResizing = false;
     private static Point _marqueeStart;
-    private static Point _lastPanPoint;
-    private static Point _imageDragStartCanvasPoint;
-    private static Image _activeImage;
-    private static double _imageStartLeft;
-    private static double _imageStartTop;
-    private static double _imageStartWidth;
-    private static double _imageStartHeight;
     private static Border _marqueeRect;
+    private static bool _isDraggingImage = false;
+    private static Image _draggingImage;
+    private static Point _dragStartCanvas;
+    private static double _dragImageStartLeft;
+    private static double _dragImageStartTop;
     private static InkCanvasEditingMode _currentMode = InkCanvasEditingMode.Select;
     private static readonly List<ToolbarIconInfo> _modeTools = new List<ToolbarIconInfo>();
     private static ToolbarIconInfo _activeModeTool;
-    private static readonly Dictionary<Image, string> _imageSourceLookup = new Dictionary<Image, string>();
-    private static DispatcherTimer _autosaveTimer;
-    private static bool _isRestoringState;
-    private static ResizeHandle _activeResizeHandle = ResizeHandle.None;
-    private const double ResizeHandleHitRadius = 14;
-    private const double MinImageWidth = 60;
-
-    private enum ResizeHandle
-    {
-        None,
-        TopLeft,
-        TopRight,
-        BottomLeft,
-        BottomRight
-    }
 
     private static string _apiUrl = "http://127.0.0.1:55557/v1/chat/completions";
     private static string _modelName = "gemini-3-flash";
@@ -123,8 +81,6 @@ public static class JaazCoreCanvas
 
     private static readonly string LogDir = @"F:\Desktop\kaifa\huabu";
     private static readonly string LogFile = Path.Combine(LogDir, "client_debug.log");
-    private static readonly string StateDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JaazStudio");
-    private static readonly string StateFile = Path.Combine(StateDir, "canvas_state.json");
 
     public static void Exec(IStepContext context)
     {
@@ -147,163 +103,11 @@ public static class JaazCoreCanvas
         } catch {}
     }
 
-    private static void InitAutosaveTimer()
-    {
-        _autosaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _autosaveTimer.Tick += (s, e) => {
-            _autosaveTimer.Stop();
-            SaveCanvasStateNow("debounced");
-        };
-    }
-
-    private static void ScheduleAutosave(string reason)
-    {
-        if (_isRestoringState) return;
-        if (_autosaveTimer == null) return;
-        _autosaveTimer.Stop();
-        _autosaveTimer.Start();
-        Log($"Autosave scheduled: reason={reason}");
-    }
-
-    private static void SaveCanvasStateNow(string reason)
-    {
-        try
-        {
-            if (_mainCanvas == null) return;
-
-            Directory.CreateDirectory(StateDir);
-            var state = new PersistedCanvasState
-            {
-                Zoom = _zoomLevel,
-                PanX = _canvasPan.X,
-                PanY = _canvasPan.Y
-            };
-
-            using (var ms = new MemoryStream())
-            {
-                _mainCanvas.Strokes.Save(ms);
-                state.StrokeDataBase64 = Convert.ToBase64String(ms.ToArray());
-            }
-
-            foreach (var image in _mainCanvas.Children.OfType<Image>())
-            {
-                if (!_imageSourceLookup.TryGetValue(image, out var src) || string.IsNullOrWhiteSpace(src))
-                {
-                    src = (image.Source as BitmapImage)?.UriSource?.ToString();
-                }
-                if (string.IsNullOrWhiteSpace(src)) continue;
-
-                double left = InkCanvas.GetLeft(image);
-                double top = InkCanvas.GetTop(image);
-                if (double.IsNaN(left)) left = 0;
-                if (double.IsNaN(top)) top = 0;
-
-                state.Images.Add(new PersistedImageItem
-                {
-                    SourcePath = src,
-                    Left = left,
-                    Top = top,
-                    Width = image.Width > 0 ? image.Width : image.ActualWidth,
-                    Height = (!double.IsNaN(image.Height) && image.Height > 0) ? image.Height : (double?)null
-                });
-            }
-
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(state, Newtonsoft.Json.Formatting.Indented);
-            File.WriteAllText(StateFile, json, Encoding.UTF8);
-            Log($"State saved: reason={reason}, images={state.Images.Count}, strokes={_mainCanvas.Strokes.Count}, file={StateFile}");
-        }
-        catch (Exception ex)
-        {
-            Log("State save error: " + ex.Message);
-        }
-    }
-
-    private static void RestoreCanvasState()
-    {
-        try
-        {
-            if (!File.Exists(StateFile))
-            {
-                Log("Restore skipped: no state file");
-                return;
-            }
-
-            var json = File.ReadAllText(StateFile, Encoding.UTF8);
-            var state = Newtonsoft.Json.JsonConvert.DeserializeObject<PersistedCanvasState>(json);
-            if (state == null)
-            {
-                Log("Restore skipped: invalid state");
-                return;
-            }
-
-            _isRestoringState = true;
-
-            _mainCanvas.Strokes.Clear();
-            _mainCanvas.Children.Clear();
-            _imageSourceLookup.Clear();
-
-            _zoomLevel = Math.Max(0.1, Math.Min(5, state.Zoom));
-            _canvasScale.ScaleX = _canvasScale.ScaleY = _zoomLevel;
-            _overlayScale.ScaleX = _overlayScale.ScaleY = _zoomLevel;
-            _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
-
-            _canvasPan.X = state.PanX;
-            _canvasPan.Y = state.PanY;
-            _overlayPan.X = state.PanX;
-            _overlayPan.Y = state.PanY;
-
-            if (!string.IsNullOrWhiteSpace(state.StrokeDataBase64))
-            {
-                byte[] strokeBytes = Convert.FromBase64String(state.StrokeDataBase64);
-                using (var ms = new MemoryStream(strokeBytes))
-                {
-                    _mainCanvas.Strokes = new System.Windows.Ink.StrokeCollection(ms);
-                }
-            }
-
-            foreach (var item in state.Images ?? new List<PersistedImageItem>())
-            {
-                if (string.IsNullOrWhiteSpace(item.SourcePath)) continue;
-                try
-                {
-                    var bmp = new BitmapImage(new Uri(item.SourcePath, UriKind.RelativeOrAbsolute));
-                    var image = new Image
-                    {
-                        Source = bmp,
-                        Width = item.Width > 0 ? item.Width : 400,
-                        Stretch = Stretch.Uniform
-                    };
-                    if (item.Height.HasValue && item.Height.Value > 0) image.Height = item.Height.Value;
-                    InkCanvas.SetLeft(image, item.Left);
-                    InkCanvas.SetTop(image, item.Top);
-                    _mainCanvas.Children.Add(image);
-                    _imageSourceLookup[image] = item.SourcePath;
-                }
-                catch (Exception ex)
-                {
-                    Log($"Restore image skipped: src={item.SourcePath}, err={ex.Message}");
-                }
-            }
-
-            UpdateLastImagePosition();
-            Log($"State restored: images={_mainCanvas.Children.OfType<Image>().Count()}, strokes={_mainCanvas.Strokes.Count}, zoom={_zoomLevel:F2}");
-        }
-        catch (Exception ex)
-        {
-            Log("State restore error: " + ex.Message);
-        }
-        finally
-        {
-            _isRestoringState = false;
-        }
-    }
-
     public static void ShowMainWindow()
     {
         // Static collection persists across window instances; reset per launch to avoid duplicated welcome messages.
         _chatHistory.Clear();
         Log("ShowMainWindow start");
-        InitAutosaveTimer();
 
         var window = new Window
         {
@@ -338,73 +142,59 @@ public static class JaazCoreCanvas
         mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
 
         // Canvas container
-        var canvasContainer = new Grid {
-            Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)),
-            ClipToBounds = true
-        };
-        _canvasHost = canvasContainer;
+        var canvasContainer = new Grid();
         _mainCanvas = new InkCanvas { 
-            Background = Brushes.Transparent, 
+            Background = new SolidColorBrush(Color.FromRgb(15, 15, 15)), 
             AllowDrop = true,
-            EditingMode = InkCanvasEditingMode.Select
+            EditingMode = InkCanvasEditingMode.Select,
+            LayoutTransform = _canvasScale,
+            Width = VirtualCanvasWidth,
+            Height = VirtualCanvasHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top
         };
-        var canvasTransforms = new TransformGroup();
-        canvasTransforms.Children.Add(_canvasScale);
-        canvasTransforms.Children.Add(_canvasPan);
-        _mainCanvas.RenderTransform = canvasTransforms;
         _mainCanvas.DefaultDrawingAttributes.Color = Colors.Cyan;
         _mainCanvas.SelectionChanged += OnCanvasSelectionChanged;
-        _mainCanvas.Strokes.StrokesChanged += (s, e) => ScheduleAutosave("strokes_changed");
 
         // Keep overlay interactive for its children (popbar), but let empty space pass mouse
         // events through to InkCanvas so drag-selection works.
-        _canvasOverlay = new Canvas { IsHitTestVisible = true, Background = null };
-        var overlayTransforms = new TransformGroup();
-        overlayTransforms.Children.Add(_overlayScale);
-        overlayTransforms.Children.Add(_overlayPan);
-        _canvasOverlay.RenderTransform = overlayTransforms;
+        _canvasOverlay = new Canvas
+        {
+            IsHitTestVisible = true,
+            Background = null,
+            Width = VirtualCanvasWidth,
+            Height = VirtualCanvasHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top
+        };
         
         canvasContainer.PreviewMouseWheel += (s, e) => {
+            if (Keyboard.Modifiers == ModifierKeys.Shift && TransformSelectedImages(scaleDelta: e.Delta > 0 ? 0.05 : -0.05, rotateDelta: 0)) {
+                e.Handled = true;
+                return;
+            }
+            if (Keyboard.Modifiers == ModifierKeys.Alt && TransformSelectedImages(scaleDelta: 0, rotateDelta: e.Delta > 0 ? 2 : -2)) {
+                e.Handled = true;
+                return;
+            }
             if (Keyboard.Modifiers == ModifierKeys.Control) {
                 double delta = e.Delta > 0 ? 0.1 : -0.1;
                 _zoomLevel = Math.Max(0.1, Math.Min(5, _zoomLevel + delta));
                 _canvasScale.ScaleX = _canvasScale.ScaleY = _zoomLevel;
-                _overlayScale.ScaleX = _overlayScale.ScaleY = _zoomLevel;
                 _txtZoom.Text = $"{(int)(_zoomLevel * 100)}%";
                 HidePopbar();
-                ScheduleAutosave("zoom");
                 e.Handled = true;
             }
         };
 
         window.KeyDown += (s, e) => {
-            if (e.Key == Key.Space) {
-                if (!IsTextInputFocused()) {
-                    _isSpacePressed = true;
-                    _mainCanvas.Cursor = Cursors.Hand;
-                    if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Hand;
-                    Log("Space down: temporary pan enabled");
-                    e.Handled = true;
-                    return;
-                }
-            }
             if (e.Key == Key.Z && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) {
                 if (_mainCanvas.Strokes.Count > 0) _mainCanvas.Strokes.RemoveAt(_mainCanvas.Strokes.Count - 1);
                 else if (_mainCanvas.Children.Count > 0) {
                     _mainCanvas.Children.RemoveAt(_mainCanvas.Children.Count - 1);
                     UpdateLastImagePosition();
                 }
-                ScheduleAutosave("undo");
             }
-        };
-        window.KeyUp += (s, e) => {
-            if (e.Key != Key.Space) return;
-            _isSpacePressed = false;
-            if (_isCanvasPanning) return;
-            var cursor = _currentMode == InkCanvasEditingMode.None ? Cursors.Hand : Cursors.Arrow;
-            _mainCanvas.Cursor = cursor;
-            if (_canvasOverlay != null) _canvasOverlay.Cursor = cursor;
-            Log("Space up: temporary pan disabled");
         };
 
         _selectionPopbar = CreateSelectionPopbar();
@@ -415,9 +205,6 @@ public static class JaazCoreCanvas
         _mainCanvas.PreviewMouseLeftButtonDown += OnCanvasMouseLeftButtonDown;
         _mainCanvas.PreviewMouseMove += OnCanvasMouseMove;
         _mainCanvas.PreviewMouseLeftButtonUp += OnCanvasMouseLeftButtonUp;
-        _canvasOverlay.PreviewMouseLeftButtonDown += OnCanvasMouseLeftButtonDown;
-        _canvasOverlay.PreviewMouseMove += OnCanvasMouseMove;
-        _canvasOverlay.PreviewMouseLeftButtonUp += OnCanvasMouseLeftButtonUp;
 
         var floatingToolbar = new Border {
             Background = new SolidColorBrush(Color.FromRgb(35, 35, 40)), CornerRadius = new CornerRadius(20),
@@ -441,14 +228,7 @@ public static class JaazCoreCanvas
         var penTool = CreateModeToolbarIcon(pathPen, "Annotate", InkCanvasEditingMode.Ink);
         var imageTool = CreateActionToolbarIcon(pathImage, "Image", () => UploadImage());
         var eraserTool = CreateModeToolbarIcon(pathEraser, "Eraser", InkCanvasEditingMode.EraseByStroke);
-        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => {
-            _mainCanvas.Strokes.Clear();
-            _mainCanvas.Children.Clear();
-            _imageSourceLookup.Clear();
-            _lastImageRight = 50;
-            HidePopbar();
-            ScheduleAutosave("clear");
-        });
+        var clearTool = CreateActionToolbarIcon(pathTrash, "Clear", () => { _mainCanvas.Strokes.Clear(); _mainCanvas.Children.Clear(); _lastImageRight = 50; HidePopbar(); });
 
         toolStack.Children.Add(panTool.Border);
         toolStack.Children.Add(selectTool.Border);
@@ -481,8 +261,6 @@ public static class JaazCoreCanvas
         rootGrid.Children.Add(topBarBorder); rootGrid.Children.Add(mainGrid);
 
         window.Content = rootGrid;
-        window.Loaded += (s, e) => RestoreCanvasState();
-        window.Closing += (s, e) => SaveCanvasStateNow("window_closing");
         window.Show();
         AddMessage("Assistant", "System ready. Select elements and generate. Ctrl + mouse wheel to zoom.");
     }
@@ -535,24 +313,7 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasSelectionChanged(object sender, EventArgs e) {
-        var selectedElements = _mainCanvas.GetSelectedElements();
-        var selectedStrokes = _mainCanvas.GetSelectedStrokes();
-
-        if (selectedElements.Count > 0 || selectedStrokes.Count > 0) {
-            Rect bounds = Rect.Empty;
-            foreach (var el in selectedElements) {
-                var r = new Rect(InkCanvas.GetLeft(el), InkCanvas.GetTop(el), el.RenderSize.Width, el.RenderSize.Height);
-                bounds.Union(r);
-            }
-            foreach (var stroke in selectedStrokes) bounds.Union(stroke.GetBounds());
-
-            Point canvasPos = _mainCanvas.TranslatePoint(new Point(bounds.Left, bounds.Bottom), _canvasOverlay);
-            Canvas.SetLeft(_selectionPopbar, Math.Max(10, canvasPos.X));
-            Canvas.SetTop(_selectionPopbar, Math.Max(10, canvasPos.Y + 10));
-            _selectionPopbar.Visibility = Visibility.Visible;
-        } else {
-            HidePopbar();
-        }
+        UpdateSelectionPopbarPosition();
     }
 
     private static void HidePopbar() {
@@ -571,50 +332,25 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (_currentMode == InkCanvasEditingMode.None || _isSpacePressed) {
-            _isCanvasPanning = true;
-            IInputElement panSurface = (IInputElement)_canvasHost ?? _mainCanvas;
-            _lastPanPoint = e.GetPosition(panSurface);
-            _mainCanvas.CaptureMouse();
-            _canvasOverlay?.CaptureMouse();
-            _mainCanvas.Cursor = Cursors.Hand;
-            if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Hand;
-            Log($"Pan start: p=({_lastPanPoint.X:F1},{_lastPanPoint.Y:F1}), pan=({_canvasPan.X:F1},{_canvasPan.Y:F1})");
-            e.Handled = true;
-            return;
-        }
-
         if (_currentMode != InkCanvasEditingMode.Select) return;
 
         Point overlayPoint = e.GetPosition(_canvasOverlay);
         Point canvasPoint = _canvasOverlay.TranslatePoint(overlayPoint, _mainCanvas);
 
-        var hitImage = FindTopImageAtPoint(canvasPoint);
-        if (hitImage != null) {
-            _activeImage = hitImage;
-            _mainCanvas.Select(new System.Windows.Ink.StrokeCollection(), new List<UIElement> { hitImage });
-            _activeResizeHandle = HitTestResizeHandle(hitImage, canvasPoint);
-
-            _imageDragStartCanvasPoint = canvasPoint;
-            _imageStartLeft = GetElementLeft(hitImage);
-            _imageStartTop = GetElementTop(hitImage);
-            _imageStartWidth = GetElementWidth(hitImage);
-            _imageStartHeight = GetElementHeight(hitImage);
-
-            if (_activeResizeHandle != ResizeHandle.None) {
-                _isImageResizing = true;
-                _mainCanvas.Cursor = GetCursorForResizeHandle(_activeResizeHandle);
-                if (_canvasOverlay != null) _canvasOverlay.Cursor = _mainCanvas.Cursor;
-                Log($"Image resize start: handle={_activeResizeHandle}, left={_imageStartLeft:F1}, top={_imageStartTop:F1}, width={_imageStartWidth:F1}");
-            } else {
-                _isImageDragging = true;
-                _mainCanvas.Cursor = Cursors.SizeAll;
-                if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.SizeAll;
-                Log($"Image drag start: left={_imageStartLeft:F1}, top={_imageStartTop:F1}");
+        if (TryGetImageAtPoint(canvasPoint, out var hitImage)) {
+            var selectedElements = _mainCanvas.GetSelectedElements();
+            if (!selectedElements.Contains(hitImage) || selectedElements.Count != 1 || _mainCanvas.GetSelectedStrokes().Count > 0) {
+                _mainCanvas.Select(new System.Windows.Ink.StrokeCollection(), new List<UIElement> { hitImage });
             }
 
+            double left = InkCanvas.GetLeft(hitImage);
+            double top = InkCanvas.GetTop(hitImage);
+            _draggingImage = hitImage;
+            _isDraggingImage = true;
+            _dragStartCanvas = canvasPoint;
+            _dragImageStartLeft = double.IsNaN(left) ? 0 : left;
+            _dragImageStartTop = double.IsNaN(top) ? 0 : top;
             _mainCanvas.CaptureMouse();
-            _canvasOverlay?.CaptureMouse();
             e.Handled = true;
             return;
         }
@@ -656,63 +392,25 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseMove(object sender, MouseEventArgs e) {
-        if (_isCanvasPanning) {
-            IInputElement panSurface = (IInputElement)_canvasHost ?? _mainCanvas;
-            Point panPoint = e.GetPosition(panSurface);
-            Vector delta = panPoint - _lastPanPoint;
-            _canvasPan.X += delta.X;
-            _canvasPan.Y += delta.Y;
-            _overlayPan.X += delta.X;
-            _overlayPan.Y += delta.Y;
-            _lastPanPoint = panPoint;
-            e.Handled = true;
-            return;
-        }
-
-        // Cursor feedback for image interactions in Select mode.
-        if (!_isSpacePressed && _currentMode == InkCanvasEditingMode.Select && !_isImageDragging && !_isImageResizing) {
-            Point hoverOverlayPoint = e.GetPosition(_canvasOverlay);
-            Point hoverCanvasPoint = _canvasOverlay.TranslatePoint(hoverOverlayPoint, _mainCanvas);
-            var hoverImage = FindTopImageAtPoint(hoverCanvasPoint);
-            if (hoverImage != null) {
-                var handle = HitTestResizeHandle(hoverImage, hoverCanvasPoint);
-                if (handle != ResizeHandle.None) {
-                    var cursor = GetCursorForResizeHandle(handle);
-                    _mainCanvas.Cursor = cursor;
-                    if (_canvasOverlay != null) _canvasOverlay.Cursor = cursor;
-                } else {
-                    _mainCanvas.Cursor = Cursors.SizeAll;
-                    if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.SizeAll;
-                }
-            } else {
-                _mainCanvas.Cursor = Cursors.Arrow;
-                if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Arrow;
-            }
-        }
-
-        if (_isImageDragging && _activeImage != null) {
-            Point canvasPoint = _canvasOverlay.TranslatePoint(e.GetPosition(_canvasOverlay), _mainCanvas);
-            Vector delta = canvasPoint - _imageDragStartCanvasPoint;
-            InkCanvas.SetLeft(_activeImage, _imageStartLeft + delta.X);
-            InkCanvas.SetTop(_activeImage, _imageStartTop + delta.Y);
-            e.Handled = true;
-            return;
-        }
-
-        if (_isImageResizing && _activeImage != null) {
-            Point canvasPoint = _canvasOverlay.TranslatePoint(e.GetPosition(_canvasOverlay), _mainCanvas);
-            ResizeActiveImage(canvasPoint);
+        if (_isDraggingImage && _draggingImage != null) {
+            Point overlayPoint = e.GetPosition(_canvasOverlay);
+            Point canvasPoint = _canvasOverlay.TranslatePoint(overlayPoint, _mainCanvas);
+            double dx = canvasPoint.X - _dragStartCanvas.X;
+            double dy = canvasPoint.Y - _dragStartCanvas.Y;
+            InkCanvas.SetLeft(_draggingImage, _dragImageStartLeft + dx);
+            InkCanvas.SetTop(_draggingImage, _dragImageStartTop + dy);
+            UpdateSelectionPopbarPosition();
             e.Handled = true;
             return;
         }
 
         if (!_isMarqueeSelecting) return;
 
-        Point currentPoint = e.GetPosition(_canvasOverlay);
-        double left = Math.Min(_marqueeStart.X, currentPoint.X);
-        double top = Math.Min(_marqueeStart.Y, currentPoint.Y);
-        double width = Math.Abs(currentPoint.X - _marqueeStart.X);
-        double height = Math.Abs(currentPoint.Y - _marqueeStart.Y);
+        Point p = e.GetPosition(_canvasOverlay);
+        double left = Math.Min(_marqueeStart.X, p.X);
+        double top = Math.Min(_marqueeStart.Y, p.Y);
+        double width = Math.Abs(p.X - _marqueeStart.X);
+        double height = Math.Abs(p.Y - _marqueeStart.Y);
 
         Canvas.SetLeft(_marqueeRect, left);
         Canvas.SetTop(_marqueeRect, top);
@@ -721,29 +419,11 @@ public static class JaazCoreCanvas
     }
 
     private static void OnCanvasMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_isImageDragging || _isImageResizing) {
-            _isImageDragging = false;
-            _isImageResizing = false;
-            _activeResizeHandle = ResizeHandle.None;
+        if (_isDraggingImage) {
+            _isDraggingImage = false;
+            _draggingImage = null;
             _mainCanvas.ReleaseMouseCapture();
-            _canvasOverlay?.ReleaseMouseCapture();
-            _mainCanvas.Cursor = Cursors.Arrow;
-            if (_canvasOverlay != null) _canvasOverlay.Cursor = Cursors.Arrow;
-            Log("Image transform end");
-            ScheduleAutosave("image_transform_end");
-            e.Handled = true;
-            return;
-        }
-
-        if (_isCanvasPanning) {
-            _isCanvasPanning = false;
-            _mainCanvas.ReleaseMouseCapture();
-            _canvasOverlay?.ReleaseMouseCapture();
-            var targetCursor = (_isSpacePressed || _currentMode == InkCanvasEditingMode.None) ? Cursors.Hand : Cursors.Arrow;
-            _mainCanvas.Cursor = targetCursor;
-            if (_canvasOverlay != null) _canvasOverlay.Cursor = targetCursor;
-            Log($"Pan end: pan=({_canvasPan.X:F1},{_canvasPan.Y:F1})");
-            ScheduleAutosave("pan_end");
+            UpdateSelectionPopbarPosition();
             e.Handled = true;
             return;
         }
@@ -789,91 +469,100 @@ public static class JaazCoreCanvas
         e.Handled = true;
     }
 
-    private static Image FindTopImageAtPoint(Point canvasPoint) {
-        for (int i = _mainCanvas.Children.Count - 1; i >= 0; i--) {
-            if (_mainCanvas.Children[i] is Image image) {
-                double left = GetElementLeft(image);
-                double top = GetElementTop(image);
-                double width = GetElementWidth(image);
-                double height = GetElementHeight(image);
-                if (width <= 0 || height <= 0) continue;
-                // Allow corner hit area to extend slightly outside the image bounds,
-                // otherwise corner resizing can incorrectly fall through to marquee selection.
-                var hitRect = new Rect(left, top, width, height);
-                hitRect.Inflate(ResizeHandleHitRadius, ResizeHandleHitRadius);
-                if (hitRect.Contains(canvasPoint)) return image;
+    private static bool TryGetImageAtPoint(Point canvasPoint, out Image hitImage) {
+        hitImage = null;
+        HitTestResult hit = VisualTreeHelper.HitTest(_mainCanvas, canvasPoint);
+        DependencyObject current = hit?.VisualHit;
+        while (current != null) {
+            if (current is Image img && _mainCanvas.Children.Contains(img)) {
+                hitImage = img;
+                return true;
+            }
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return false;
+    }
+
+    private static bool TransformSelectedImages(double scaleDelta, double rotateDelta) {
+        var selectedImages = _mainCanvas.GetSelectedElements().OfType<Image>().ToList();
+        if (selectedImages.Count == 0) return false;
+
+        foreach (var img in selectedImages) {
+            var group = EnsureImageTransformGroup(img, out var scale, out var rotate);
+            if (scaleDelta != 0) {
+                double nextX = Math.Max(0.1, Math.Min(10, scale.ScaleX + scaleDelta));
+                double nextY = Math.Max(0.1, Math.Min(10, scale.ScaleY + scaleDelta));
+                scale.ScaleX = nextX;
+                scale.ScaleY = nextY;
+            }
+            if (rotateDelta != 0) {
+                rotate.Angle += rotateDelta;
+            }
+            img.RenderTransform = group;
+        }
+
+        UpdateSelectionPopbarPosition();
+        return true;
+    }
+
+    private static TransformGroup EnsureImageTransformGroup(Image img, out ScaleTransform scale, out RotateTransform rotate) {
+        scale = null;
+        rotate = null;
+
+        if (img.RenderTransform is TransformGroup existingGroup) {
+            foreach (var t in existingGroup.Children) {
+                if (t is ScaleTransform s && scale == null) scale = s;
+                if (t is RotateTransform r && rotate == null) rotate = r;
+            }
+            if (scale != null && rotate != null) {
+                img.RenderTransformOrigin = new Point(0.5, 0.5);
+                return existingGroup;
             }
         }
-        return null;
-    }
 
-    private static ResizeHandle HitTestResizeHandle(Image image, Point canvasPoint) {
-        double left = GetElementLeft(image);
-        double top = GetElementTop(image);
-        double width = GetElementWidth(image);
-        double height = GetElementHeight(image);
-        if (width <= 0 || height <= 0) return ResizeHandle.None;
+        var group = new TransformGroup();
+        scale = new ScaleTransform(1, 1);
+        rotate = new RotateTransform(0);
 
-        var topLeft = new Point(left, top);
-        var topRight = new Point(left + width, top);
-        var bottomLeft = new Point(left, top + height);
-        var bottomRight = new Point(left + width, top + height);
-
-        if ((canvasPoint - topLeft).Length <= ResizeHandleHitRadius) return ResizeHandle.TopLeft;
-        if ((canvasPoint - topRight).Length <= ResizeHandleHitRadius) return ResizeHandle.TopRight;
-        if ((canvasPoint - bottomLeft).Length <= ResizeHandleHitRadius) return ResizeHandle.BottomLeft;
-        if ((canvasPoint - bottomRight).Length <= ResizeHandleHitRadius) return ResizeHandle.BottomRight;
-
-        return ResizeHandle.None;
-    }
-
-    private static Cursor GetCursorForResizeHandle(ResizeHandle handle) {
-        return (handle == ResizeHandle.TopLeft || handle == ResizeHandle.BottomRight) ? Cursors.SizeNWSE : Cursors.SizeNESW;
-    }
-
-    private static double GetElementLeft(FrameworkElement element) {
-        double x = InkCanvas.GetLeft(element);
-        return double.IsNaN(x) ? 0 : x;
-    }
-
-    private static double GetElementTop(FrameworkElement element) {
-        double y = InkCanvas.GetTop(element);
-        return double.IsNaN(y) ? 0 : y;
-    }
-
-    private static double GetElementWidth(FrameworkElement element) {
-        if (element.ActualWidth > 0) return element.ActualWidth;
-        if (!double.IsNaN(element.Width) && element.Width > 0) return element.Width;
-        return 0;
-    }
-
-    private static double GetElementHeight(FrameworkElement element) {
-        if (element.ActualHeight > 0) return element.ActualHeight;
-        if (!double.IsNaN(element.Height) && element.Height > 0) return element.Height;
-        return 0;
-    }
-
-    private static void ResizeActiveImage(Point currentCanvasPoint) {
-        if (_activeImage == null) return;
-        if (_imageStartWidth <= 0) return;
-
-        // Keep original aspect ratio while resizing by corners.
-        double aspect = _imageStartHeight > 0 ? _imageStartWidth / _imageStartHeight : 1.0;
-        double dx = currentCanvasPoint.X - _imageDragStartCanvasPoint.X;
-        double signedDelta = (_activeResizeHandle == ResizeHandle.TopLeft || _activeResizeHandle == ResizeHandle.BottomLeft) ? -dx : dx;
-
-        double targetWidth = Math.Max(MinImageWidth, _imageStartWidth + signedDelta);
-        double targetHeight = Math.Max(1, targetWidth / Math.Max(0.0001, aspect));
-
-        double newLeft = _imageStartLeft;
-        if (_activeResizeHandle == ResizeHandle.TopLeft || _activeResizeHandle == ResizeHandle.BottomLeft) {
-            double right = _imageStartLeft + _imageStartWidth;
-            newLeft = right - targetWidth;
+        if (img.RenderTransform is TransformGroup oldGroup) {
+            foreach (var t in oldGroup.Children) group.Children.Add(t);
+        } else if (img.RenderTransform != null && !(img.RenderTransform is MatrixTransform m && m.Matrix.IsIdentity)) {
+            group.Children.Add(img.RenderTransform);
         }
 
-        InkCanvas.SetLeft(_activeImage, newLeft);
-        _activeImage.Width = targetWidth;
-        if (!double.IsNaN(_activeImage.Height) && _activeImage.Height > 0) _activeImage.Height = targetHeight;
+        group.Children.Add(scale);
+        group.Children.Add(rotate);
+        img.RenderTransformOrigin = new Point(0.5, 0.5);
+        return group;
+    }
+
+    private static void UpdateSelectionPopbarPosition() {
+        var selectedElements = _mainCanvas.GetSelectedElements();
+        var selectedStrokes = _mainCanvas.GetSelectedStrokes();
+        if (selectedElements.Count == 0 && selectedStrokes.Count == 0) {
+            HidePopbar();
+            return;
+        }
+
+        Rect bounds = Rect.Empty;
+        foreach (var el in selectedElements) {
+            if (el is FrameworkElement fe) {
+                double left = InkCanvas.GetLeft(fe);
+                double top = InkCanvas.GetTop(fe);
+                if (double.IsNaN(left)) left = 0;
+                if (double.IsNaN(top)) top = 0;
+                double width = fe.ActualWidth > 0 ? fe.ActualWidth : fe.Width;
+                double height = fe.ActualHeight > 0 ? fe.ActualHeight : fe.Height;
+                if (width > 0 && height > 0) bounds.Union(new Rect(left, top, width, height));
+            }
+        }
+        foreach (var stroke in selectedStrokes) bounds.Union(stroke.GetBounds());
+        if (bounds.IsEmpty) return;
+
+        Point canvasPos = _mainCanvas.TranslatePoint(new Point(bounds.Left, bounds.Bottom), _canvasOverlay);
+        Canvas.SetLeft(_selectionPopbar, Math.Max(10, canvasPos.X));
+        Canvas.SetTop(_selectionPopbar, Math.Max(10, canvasPos.Y + 10));
+        _selectionPopbar.Visibility = Visibility.Visible;
     }
 
     private static void HandleSelectedContentRequest() {
@@ -1064,13 +753,10 @@ public static class JaazCoreCanvas
             var b = new BitmapImage(new Uri(path, UriKind.RelativeOrAbsolute));
             var img = new Image { Source = b, Width = 400, Stretch = Stretch.Uniform };
             InkCanvas.SetLeft(img, _lastImageRight); InkCanvas.SetTop(img, 100);
-            _mainCanvas.Children.Add(img);
-            _imageSourceLookup[img] = path;
-            _lastImageRight += 420;
+            _mainCanvas.Children.Add(img); _lastImageRight += 420;
             var selectTool = _modeTools.FirstOrDefault(t => t.Mode == InkCanvasEditingMode.Select);
             if (selectTool != null) ActivateModeTool(selectTool);
             else ApplyCanvasMode(InkCanvasEditingMode.Select);
-            ScheduleAutosave("image_added");
         } catch {}
     }
 
@@ -1176,20 +862,11 @@ public static class JaazCoreCanvas
         _currentMode = mode;
         _mainCanvas.EditingMode = mode;
         _mainCanvas.EditingModeInverted = InkCanvasEditingMode.None;
-        var targetCursor = (_isSpacePressed || mode == InkCanvasEditingMode.None) ? Cursors.Hand : Cursors.Arrow;
+        var targetCursor = mode == InkCanvasEditingMode.None ? Cursors.Hand : Cursors.Arrow;
         _mainCanvas.Cursor = targetCursor;
         if (_canvasOverlay != null) _canvasOverlay.Cursor = targetCursor;
         _mainCanvas.Focus();
         Log($"ApplyCanvasMode: {prev} -> {mode}, inkCanvasMode={_mainCanvas.EditingMode}, focused={_mainCanvas.IsKeyboardFocusWithin}");
-    }
-
-    private static bool IsTextInputFocused() {
-        var focused = Keyboard.FocusedElement as DependencyObject;
-        while (focused != null) {
-            if (focused is TextBox || focused is PasswordBox || focused is RichTextBox) return true;
-            focused = VisualTreeHelper.GetParent(focused);
-        }
-        return false;
     }
 
     private static DataTemplate CreateMessageTemplate() {
